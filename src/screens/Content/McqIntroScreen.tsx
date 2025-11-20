@@ -19,6 +19,116 @@
 // }
 
 
+//Firestore
+// // src/screens/Content/McqIntroScreen.tsx
+// import React, { useEffect, useState } from 'react';
+// import { View, Text, Button, ActivityIndicator } from 'react-native';
+// import { useNavigation, useRoute } from '@react-navigation/native';
+// import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+// import { RootStackParamList } from '../../navigation/RootNavigator';
+
+// import { db } from '../../firebase';
+// import { doc, getDoc } from 'firebase/firestore';
+
+// type Question = {
+//   id: string;
+//   q: string;
+//   options: string[];
+//   correctIndex: number;
+// };
+
+// type ChapterDoc = {
+//   name: string;
+//   questions?: Question[];
+// };
+
+// export default function McqIntroScreen() {
+//   const route = useRoute<any>();
+//   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+//   const { subjectId, unitId, chapterId } = route.params ?? {};
+
+//   const [chapter, setChapter] = useState<ChapterDoc | null>(null);
+//   const [loading, setLoading] = useState(true);
+//   const [error, setError] = useState<string | null>(null);
+
+//   useEffect(() => {
+//     const load = async () => {
+//       try {
+//         if (!chapterId) {
+//           setError('No chapter selected.');
+//           setLoading(false);
+//           return;
+//         }
+//         const ref = doc(db, 'nodes', chapterId);
+//         const snap = await getDoc(ref);
+//         if (!snap.exists()) {
+//           setError('Chapter not found.');
+//         } else {
+//           setChapter(snap.data() as ChapterDoc);
+//         }
+//       } catch (e: any) {
+//         console.error('[McqIntroScreen] load error', e);
+//         setError('Failed to load MCQs.');
+//       } finally {
+//         setLoading(false);
+//       }
+//     };
+//     load();
+//   }, [chapterId]);
+
+//   if (loading) {
+//     return (
+//       <View style={styles.center}>
+//         <ActivityIndicator />
+//         <Text style={{ marginTop: 8 }}>Loading MCQs…</Text>
+//       </View>
+//     );
+//   }
+
+//   if (error || !subjectId || !chapterId) {
+//     return (
+//       <View style={styles.center}>
+//         <Text>{error || 'Missing chapter selection.'}</Text>
+//       </View>
+//     );
+//   }
+
+//   const count = chapter?.questions?.length || 0;
+
+//   return (
+//     <View style={styles.center}>
+//       <Text style={{ fontSize: 16, marginBottom: 6 }}>
+//         {chapter?.name || 'MCQ for selected chapter'}
+//       </Text>
+//       <Text style={{ marginBottom: 12 }}>
+//         Total questions: {count}
+//       </Text>
+//       <Button
+//         title={count > 0 ? 'Start MCQ' : 'No MCQs available'}
+//         disabled={count === 0}
+//         onPress={() =>
+//           nav.navigate('MCQQuiz', {
+//             subjectId,
+//             unitId,
+//             chapterId,
+//           })
+//         }
+//       />
+//     </View>
+//   );
+// }
+
+// const styles = {
+//   center: {
+//     flex: 1,
+//     alignItems: 'center' as const,
+//     justifyContent: 'center' as const,
+//     padding: 16,
+//     gap: 12,
+//   },
+// };
+
+
 // src/screens/Content/McqIntroScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { View, Text, Button, ActivityIndicator } from 'react-native';
@@ -26,54 +136,73 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 
-import { db } from '../../firebase';
-import { doc, getDoc } from 'firebase/firestore';
-
-type Question = {
-  id: string;
-  q: string;
-  options: string[];
-  correctIndex: number;
-};
-
-type ChapterDoc = {
-  name: string;
-  questions?: Question[];
-};
+// 🔹 Static data
+import {
+  SUBJECTS,
+  Subject,
+  Unit,
+  Chapter,
+} from '../../data/demo';
 
 export default function McqIntroScreen() {
   const route = useRoute<any>();
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { subjectId, unitId, chapterId } = route.params ?? {};
 
-  const [chapter, setChapter] = useState<ChapterDoc | null>(null);
+  const [chapter, setChapter] = useState<Chapter | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        if (!chapterId) {
-          setError('No chapter selected.');
-          setLoading(false);
-          return;
-        }
-        const ref = doc(db, 'nodes', chapterId);
-        const snap = await getDoc(ref);
-        if (!snap.exists()) {
-          setError('Chapter not found.');
-        } else {
-          setChapter(snap.data() as ChapterDoc);
-        }
-      } catch (e: any) {
-        console.error('[McqIntroScreen] load error', e);
-        setError('Failed to load MCQs.');
-      } finally {
-        setLoading(false);
+    try {
+      setLoading(true);
+      setError(null);
+
+      if (!subjectId || !unitId || !chapterId) {
+        setError('Missing chapter selection.');
+        setChapter(null);
+        return;
       }
-    };
-    load();
-  }, [chapterId]);
+
+      // 1️⃣ Find subject
+      const subject: Subject | undefined = SUBJECTS.find(
+        s => s.id === subjectId,
+      );
+      if (!subject) {
+        setError('Subject not found in demo data.');
+        setChapter(null);
+        return;
+      }
+
+      // 2️⃣ Find unit
+      const unit: Unit | undefined = subject.units.find(
+        u => u.id === unitId,
+      );
+      if (!unit) {
+        setError('Unit not found in demo data.');
+        setChapter(null);
+        return;
+      }
+
+      // 3️⃣ Find chapter
+      const ch: Chapter | undefined = unit.chapters.find(
+        c => c.id === chapterId,
+      );
+      if (!ch) {
+        setError('Chapter not found in demo data.');
+        setChapter(null);
+        return;
+      }
+
+      setChapter(ch);
+    } catch (e: any) {
+      console.error('[McqIntroScreen] error loading from demo.ts', e);
+      setError('Failed to load MCQs.');
+      setChapter(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [subjectId, unitId, chapterId]);
 
   if (loading) {
     return (

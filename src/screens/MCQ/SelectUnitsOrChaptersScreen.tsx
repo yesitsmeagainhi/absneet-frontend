@@ -1,5 +1,4 @@
-
-// src/screens/SelectUnitsOrChaptersScreen.tsx
+// src/screens/MCQ/SelectUnitsOrChaptersScreen.tsx
 import React, { useEffect, useState } from 'react';
 import {
     View,
@@ -8,32 +7,17 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     ScrollView,
+    FlatList,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 
-import { db } from '../../firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+// 🔹 Static data instead of Firestore
+import { SUBJECTS, Question as DemoQuestion, Subject } from '../../data/demo';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SelectUnitsOrChapters'>;
 
 type OptionKey = 'A' | 'B' | 'C' | 'D';
-
-// How questions are stored in chapter docs (ChaptersPage)
-type RawQuestion = {
-    id?: string;
-    q: string;
-    options: string[];     // ['opt1','opt2','opt3','opt4']
-    correctIndex: number;  // 0-based index into options[]
-    explanation?: string;  // optional explanation field in Firestore
-    exp?: string;          // fallback key if you used "exp"
-};
-
-type RawChapterDoc = {
-    subjectId?: string;
-    unitId?: string;
-    questions?: RawQuestion[];
-};
 
 type McqDoc = {
     id: string;
@@ -60,7 +44,7 @@ export default function SelectUnitsOrChaptersScreen({ route, navigation }: Props
     const [answers, setAnswers] = useState<Record<string, OptionKey | null>>({});
     const [submitted, setSubmitted] = useState(false);
     const [score, setScore] = useState(0);
-    const [currentIndex, setCurrentIndex] = useState(0); // 👈 one question per screen
+    const [currentIndex, setCurrentIndex] = useState(0); // one question per screen
 
     useEffect(() => {
         if (!initialSubjectId) {
@@ -68,73 +52,67 @@ export default function SelectUnitsOrChaptersScreen({ route, navigation }: Props
             return;
         }
 
-        const loadMcqs = async () => {
+        const buildMcqsFromDemo = () => {
             try {
                 setLoading(true);
 
-                // 🔹 STEP 1: load all chapters for this subject from "nodes"
-                const chaptersQ = query(
-                    collection(db, 'nodes'),
-                    where('type', '==', 'chapter'),
-                    where('subjectId', '==', initialSubjectId),
-                );
-                const snap = await getDocs(chaptersQ);
-
-                console.log(
-                    '[SelectUnitsOrChapters] chapters found =',
-                    snap.docs.length,
+                const subject: Subject | undefined = SUBJECTS.find(
+                    s => s.id === initialSubjectId,
                 );
 
-                const collected: McqDoc[] = [];
-                const letters: OptionKey[] = ['A', 'B', 'C', 'D'];
-
-                snap.docs.forEach((docSnap) => {
-                    const data = docSnap.data() as RawChapterDoc & { subjectId?: string; unitId?: string };
-                    const chapterId = docSnap.id;
-                    const qs = data.questions || [];
-
-                    console.log(
-                        `[SelectUnitsOrChapters] chapter ${chapterId} has questions =`,
-                        qs.length,
+                if (!subject) {
+                    console.warn(
+                        '[SelectUnitsOrChapters] Subject not found in demo.ts for id =',
+                        initialSubjectId,
                     );
+                    setMcqs([]);
+                    setAnswers({});
+                    setCurrentIndex(0);
+                    setSubmitted(false);
+                    setScore(0);
+                    return;
+                }
 
-                    qs.forEach((qObj, qIdx) => {
-                        const opts = qObj.options || [];
+                const letters: OptionKey[] = ['A', 'B', 'C', 'D'];
+                const collected: McqDoc[] = [];
 
-                        const optMap = {
-                            A: opts[0] ?? '',
-                            B: opts[1] ?? '',
-                            C: opts[2] ?? '',
-                            D: opts[3] ?? '',
-                        };
+                subject.units.forEach(unit => {
+                    unit.chapters.forEach(chapter => {
+                        const qs: DemoQuestion[] = chapter.questions || [];
+                        qs.forEach((qObj, idx) => {
+                            const opts = qObj.options || [];
 
-                        const idx = typeof qObj.correctIndex === 'number' ? qObj.correctIndex : 0;
-                        const correctLetter: OptionKey = letters[idx] ?? 'A';
+                            const optMap = {
+                                A: opts[0] ?? '',
+                                B: opts[1] ?? '',
+                                C: opts[2] ?? '',
+                                D: opts[3] ?? '',
+                            };
 
-                        const explanation =
-                            (qObj.explanation ?? qObj.exp ?? '') || undefined;
+                            const correctLetter: OptionKey =
+                                letters[qObj.correctIndex] ?? 'A';
 
-                        collected.push({
-                            id: qObj.id || `${chapterId}_${qIdx}`, // unique ID per question
-                            subjectId: data.subjectId,
-                            unitId: data.unitId,
-                            chapterId,
-                            question: qObj.q,
-                            options: optMap,
-                            correctOption: correctLetter,
-                            explanation,
+                            collected.push({
+                                id: qObj.id || `${chapter.id}_${idx}`,
+                                subjectId: subject.id,
+                                unitId: unit.id,
+                                chapterId: chapter.id,
+                                question: qObj.q,
+                                options: optMap,
+                                correctOption: correctLetter,
+                                explanation: qObj.explanation,
+                            });
                         });
                     });
                 });
 
                 console.log(
-                    '[SelectUnitsOrChapters] total MCQs collected =',
+                    '[SelectUnitsOrChapters] total MCQs collected from demo.ts =',
                     collected.length,
                 );
 
                 setMcqs(collected);
 
-                // Initialize answers map + reset current question
                 const initialAnswers: Record<string, OptionKey | null> = {};
                 collected.forEach(r => {
                     initialAnswers[r.id] = null;
@@ -143,14 +121,12 @@ export default function SelectUnitsOrChaptersScreen({ route, navigation }: Props
                 setCurrentIndex(0);
                 setSubmitted(false);
                 setScore(0);
-            } catch (err) {
-                console.error('[SelectUnitsOrChapters] Error loading MCQs', err);
             } finally {
                 setLoading(false);
             }
         };
 
-        loadMcqs();
+        buildMcqsFromDemo();
     }, [initialSubjectId]);
 
     const total = mcqs.length;
@@ -204,26 +180,13 @@ export default function SelectUnitsOrChaptersScreen({ route, navigation }: Props
     const isFirst = currentIndex === 0;
     const isLast = currentIndex === total - 1;
 
-    // Next/Submit button behavior
-    const nextBtnLabel = !submitted
-        ? isLast
-            ? 'Submit Quiz'
-            : 'Next'
-        : 'Next';
-
-    const nextBtnDisabled = submitted ? isLast : false;
+    const nextBtnLabel = isLast ? 'Submit Quiz' : 'Next';
 
     const onPressNext = () => {
-        if (!submitted) {
-            if (isLast) {
-                handleSubmit();
-            } else {
-                goNext();
-            }
+        if (isLast) {
+            handleSubmit();
         } else {
-            if (!isLast) {
-                goNext();
-            }
+            goNext();
         }
     };
 
@@ -252,7 +215,7 @@ export default function SelectUnitsOrChaptersScreen({ route, navigation }: Props
                 </View>
             )}
 
-            {/* Result summary */}
+            {/* Result summary (top) */}
             {submitted && total > 0 && (
                 <View style={styles.resultCard}>
                     <Text style={styles.resultText}>
@@ -264,8 +227,8 @@ export default function SelectUnitsOrChaptersScreen({ route, navigation }: Props
                 </View>
             )}
 
-            {/* ONE QUESTION PER SCREEN */}
-            {!loading && total > 0 && currentQuestion && (
+            {/* QUIZ MODE: One question per screen (like before) */}
+            {!loading && !submitted && total > 0 && currentQuestion && (
                 <View style={styles.questionContainer}>
                     <ScrollView
                         contentContainerStyle={{ paddingBottom: 24 }}
@@ -280,28 +243,14 @@ export default function SelectUnitsOrChaptersScreen({ route, navigation }: Props
                             {(['A', 'B', 'C', 'D'] as OptionKey[]).map(key => {
                                 const userAns = answers[currentQuestion.id];
                                 const isSelected = userAns === key;
-                                const isCorrect =
-                                    submitted && currentQuestion.correctOption === key;
-                                const isWrong =
-                                    submitted && isSelected && currentQuestion.correctOption !== key;
 
                                 let bg = '#fff';
                                 let border = '#e5e5e5';
                                 let txt = '#111';
 
-                                if (!submitted && isSelected) {
+                                if (isSelected) {
                                     bg = '#EDE9FE';
                                     border = '#6D28D9';
-                                }
-
-                                if (submitted) {
-                                    if (isCorrect) {
-                                        bg = '#DCFCE7';
-                                        border = '#16A34A';
-                                    } else if (isWrong) {
-                                        bg = '#FEE2E2';
-                                        border = '#DC2626';
-                                    }
                                 }
 
                                 return (
@@ -311,104 +260,139 @@ export default function SelectUnitsOrChaptersScreen({ route, navigation }: Props
                                             styles.optBtn,
                                             { backgroundColor: bg, borderColor: border },
                                         ]}
-                                        disabled={submitted}
                                         activeOpacity={0.7}
-                                        onPress={() => handleSelectOption(currentQuestion.id, key)}
+                                        onPress={() =>
+                                            handleSelectOption(currentQuestion.id, key)
+                                        }
                                     >
-                                        <Text style={[styles.optKey, { color: txt }]}>{key}.</Text>
+                                        <Text style={[styles.optKey, { color: txt }]}>
+                                            {key}.
+                                        </Text>
                                         <Text style={[styles.optText, { color: txt }]}>
                                             {currentQuestion.options?.[key]}
                                         </Text>
                                     </TouchableOpacity>
                                 );
                             })}
-
-                            {/* Review info: your answer + correct answer + explanation */}
-                            {submitted && (
-                                <View style={{ marginTop: 10 }}>
-                                    <Text style={styles.answerSummary}>
-                                        Your answer:{' '}
-                                        {answers[currentQuestion.id]
-                                            ? `${answers[currentQuestion.id]}. ${currentQuestion.options?.[
-                                            answers[currentQuestion.id] as OptionKey
-                                            ]
-                                            } ${answers[currentQuestion.id] ===
-                                                currentQuestion.correctOption
-                                                ? '(Correct)'
-                                                : '(Wrong)'
-                                            }`
-                                            : 'Not answered'}
-                                    </Text>
-
-                                    <Text style={styles.answerSummary}>
-                                        Correct answer:{' '}
-                                        {currentQuestion.correctOption}.{' '}
-                                        {currentQuestion.options?.[currentQuestion.correctOption]}
-                                    </Text>
-
-                                    {currentQuestion.explanation ? (
-                                        <View style={{ marginTop: 6 }}>
-                                            <Text style={styles.explanationLabel}>Explanation:</Text>
-                                            <Text style={styles.explanationText}>
-                                                {currentQuestion.explanation}
-                                            </Text>
-                                        </View>
-                                    ) : null}
-                                </View>
-                            )}
                         </View>
                     </ScrollView>
                 </View>
             )}
 
-            {/* Bottom actions: navigation + submit / retake / back */}
+            {/* REVIEW MODE: Like CustomMCQSolveScreen – FlatList of all questions */}
+            {submitted && total > 0 && (
+                <FlatList
+                    data={mcqs}
+                    keyExtractor={item => item.id}
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ paddingBottom: 80 }}
+                    renderItem={({ item, index }) => {
+                        const userAns = answers[item.id];
+                        const showExplanation =
+                            item.explanation && userAns !== item.correctOption;
+
+                        return (
+                            <View style={styles.qCard}>
+                                <Text style={styles.qText}>
+                                    Q{index + 1}. {item.question}
+                                </Text>
+
+                                {(['A', 'B', 'C', 'D'] as OptionKey[]).map(key => {
+                                    const isSelected = userAns === key;
+                                    const isCorrect = item.correctOption === key;
+                                    const isWrong = isSelected && !isCorrect;
+
+                                    let bg = '#fff';
+                                    let border = '#e5e5e5';
+                                    let txt = '#111';
+
+                                    if (isCorrect) {
+                                        bg = '#DCFCE7';
+                                        border = '#16A34A';
+                                    } else if (isWrong) {
+                                        bg = '#FEE2E2';
+                                        border = '#DC2626';
+                                    }
+
+                                    return (
+                                        <View
+                                            key={key}
+                                            style={[
+                                                styles.optBtn,
+                                                { backgroundColor: bg, borderColor: border },
+                                            ]}
+                                        >
+                                            <Text style={[styles.optKey, { color: txt }]}>
+                                                {key}.
+                                            </Text>
+                                            <Text style={[styles.optText, { color: txt }]}>
+                                                {item.options?.[key]}
+                                            </Text>
+                                        </View>
+                                    );
+                                })}
+
+                                {/* Correct answer line */}
+                                <Text style={styles.answerSummary}>
+                                    Correct answer:{' '}
+                                    {item.correctOption}.{' '}
+                                    {item.options?.[item.correctOption]}
+                                </Text>
+
+                                {/* Explanation if wrong / not answered */}
+                                {showExplanation && (
+                                    <View style={{ marginTop: 6 }}>
+                                        <Text style={styles.explanationLabel}>
+                                            Explanation:
+                                        </Text>
+                                        <Text style={styles.explanationText}>
+                                            {item.explanation}
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+                        );
+                    }}
+                />
+            )}
+
+            {/* Bottom actions: navigation (quiz) + retake/back (review) */}
             {!loading && total > 0 && (
                 <View style={styles.bottomBar}>
-                    {/* Navigation row */}
-                    <View style={styles.navRow}>
-                        <TouchableOpacity
-                            style={[
-                                styles.navBtn,
-                                isFirst && styles.navBtnDisabled,
-                            ]}
-                            disabled={isFirst}
-                            onPress={goPrev}
-                        >
-                            <Text
+                    {!submitted ? (
+                        <View style={styles.navRow}>
+                            <TouchableOpacity
                                 style={[
-                                    styles.navBtnText,
-                                    isFirst && styles.navBtnTextDisabled,
+                                    styles.navBtn,
+                                    isFirst && styles.navBtnDisabled,
                                 ]}
+                                disabled={isFirst}
+                                onPress={goPrev}
                             >
-                                Previous
+                                <Text
+                                    style={[
+                                        styles.navBtnText,
+                                        isFirst && styles.navBtnTextDisabled,
+                                    ]}
+                                >
+                                    Previous
+                                </Text>
+                            </TouchableOpacity>
+
+                            <Text style={styles.progressText}>
+                                Q {currentIndex + 1} / {total}
                             </Text>
-                        </TouchableOpacity>
 
-                        <Text style={styles.progressText}>
-                            Q {currentIndex + 1} / {total}
-                        </Text>
-
-                        <TouchableOpacity
-                            style={[
-                                styles.navBtn,
-                                nextBtnDisabled && styles.navBtnDisabled,
-                            ]}
-                            disabled={nextBtnDisabled}
-                            onPress={onPressNext}
-                        >
-                            <Text
-                                style={[
-                                    styles.navBtnText,
-                                    nextBtnDisabled && styles.navBtnTextDisabled,
-                                ]}
+                            <TouchableOpacity
+                                style={styles.navBtnPrimary}
+                                onPress={onPressNext}
                             >
-                                {nextBtnLabel}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* After submission: Retake + Back */}
-                    {submitted && (
+                                <Text style={styles.navBtnPrimaryText}>
+                                    {nextBtnLabel}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
                         <View style={styles.actionRow}>
                             <TouchableOpacity
                                 style={[styles.primaryBtn, { flex: 1 }]}
@@ -447,6 +431,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         borderRadius: 12,
         padding: 12,
+        marginTop: 8,
         borderWidth: 1,
         borderColor: '#E5E7EB',
     },
@@ -483,7 +468,7 @@ const styles = StyleSheet.create({
     answerSummary: {
         fontSize: 13,
         color: '#374151',
-        marginTop: 2,
+        marginTop: 4,
     },
     explanationLabel: {
         fontSize: 13,
@@ -504,7 +489,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 6,
+        gap: 10,
     },
     navBtn: {
         paddingVertical: 8,
@@ -522,6 +507,17 @@ const styles = StyleSheet.create({
     },
     navBtnTextDisabled: {
         color: '#9CA3AF',
+    },
+    navBtnPrimary: {
+        paddingVertical: 10,
+        paddingHorizontal: 18,
+        borderRadius: 999,
+        backgroundColor: '#6D28D9',
+    },
+    navBtnPrimaryText: {
+        color: '#fff',
+        fontWeight: '600',
+        fontSize: 14,
     },
     progressText: {
         fontSize: 13,

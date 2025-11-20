@@ -15,10 +15,19 @@ import CustomMCQQuiz from '../screens/MCQ/CustomMCQselectScreen';
 import CustomMCQSolve from '../screens/MCQ/CustomMCQSolveScreen';
 import MCQQuizScreen from '../screens/MCQ/MCQQuizScreen';
 import ResultScreen from '../screens/MCQ/ResultScreen';
+import ReviewAnswersScreen from '../screens/MCQ/ReviewAnswersScreen';
+
 import PYQSubjectsScreen from '../screens/Papers/PYQSubjectsScreen';
+import PYQYearsScreen from '../screens/PYQ/PYQYearsScreen';
 import PYQPapersScreen from '../screens/Papers/PYQPapersScreen';
+import PYQPdfPapersScreen from '../screens/PYQ/PYQPdfPapersScreen';
+import DemoMCQQuizScreen from '../screens/MCQ/DemoMCQQuizScreen';
+import HelpScreen from '../screens/Home/HelpScreen';
 import ContentTabs from './ContentTabs';
 import NewsTestScreen from '../screens/NewsTestScreen';
+import type { Question } from '../data/demo';
+import MockTestPapersScreen from '../screens/Papers/MostTestPapersScreen';
+
 export type CustomMcqQuestionParam = {
     id: string;
     question: string;
@@ -34,25 +43,36 @@ export type RootStackParamList = {
     SignUp: undefined;
     HomeTabs: undefined;
     NewsTest: undefined;
+    Help: undefined;
     SubjectDetail: { subjectId: string };
     Units: { subjectId: string };
     Chapters: { subjectId: string; unitId: string };
     ContentTabs: { subjectId: string; unitId: string; chapterId: string };
     SelectUnitsOrChapters: { subjectId: string };
+    DemoMCQQuiz: { subjectId: string };
+    // MCQQuiz: {
+    //     subjectId: string;
+    //     chapterId: string;
+    //     unitId: string;
+    //     selectedQIds?: string[];
+    // };
     MCQQuiz: {
-        subjectId: string;
-        chapterId: string;
-        unitId: string;
-        selectedQIds?: string[];
+        subjectId?: string;
+        unitId?: string;
+        chapterId?: string;
+        title?: string;         // e.g. 'Physics – NEET 2023'
+        questions?: Question[]; // when using PYQ mode
+        explanation?: string;
     };
     VideoPlayer: { title: string; url: string };
     CustomMCQQuiz: { subjectId?: string } | undefined;
-
+    MockTestPapers: undefined;
     CustomMCQSolve: { questions: CustomMcqQuestionParam[] };
     // ✅ single, consistent route for the viewer
     PDFViewer: { title: string; url: string };
     PYQSubjects: undefined;
     PYQPapers: { subjectId: string; subjectName: string };
+    PYQYears: { subjectId: string; subjectName: string };
     PYQQuiz: {
         subjectId: string;
         subjectName: string;
@@ -62,9 +82,27 @@ export type RootStackParamList = {
         exam: string;
         questions: any[]; // or Question[] from your demo.ts
     };
-    Result: { correct: number; total: number; answers: any[] };
+    PYQPdfPapers: undefined;
+    // Result: { title: string, correct: number; total: number; answers: any[], questions: any[] };
     // PYQSubjects: { subjectName: string };
     // PYQPapers: { subjectId: string, subjectName: string };
+    Result: {
+        title?: string;
+        correct: number;
+        total: number;
+        questions: Question[];
+        answers: number[]; // index chosen per question (-1 for not answered)
+    };
+
+    ReviewAnswers: {
+        title?: string;
+        questions: Question[];
+        answers: number[];
+    };
+    NewsScreen: {
+
+    }
+
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -79,9 +117,14 @@ export default function RootNavigator() {
                 component={HomeTabs}
                 options={{ headerShown: false }}
             />
+            <Stack.Screen
+                name="DemoMCQQuiz"
+                component={DemoMCQQuizScreen}
+                options={{ title: 'Demo MCQ Quiz' }}
+            />
 
             <Stack.Screen name="NewsTest" component={NewsTestScreen} />
-
+            <Stack.Screen name="Help" component={HelpScreen} />
             <Stack.Screen
                 name="SubjectDetail"
                 component={SubjectDetailScreen}
@@ -136,17 +179,34 @@ export default function RootNavigator() {
                 component={ResultScreen}
                 options={{ title: 'Result' }}
             />
+            <Stack.Screen
+                name="ReviewAnswers"
+                component={ReviewAnswersScreen}
+                options={{ title: 'Review Answers' }}
+            />
 
             <Stack.Screen
                 name="PYQSubjects"
                 component={PYQSubjectsScreen}
                 options={{ title: 'Previous Year MCQ' }}
             />
+            <Stack.Screen name="PYQYears" component={PYQYearsScreen} />
+            <Stack.Screen
+                name="PYQPdfPapers"
+                component={PYQPdfPapersScreen}
+                options={{ title: 'Previous Year MCQ Papers' }}
+            />
             <Stack.Screen
                 name="PYQPapers"
                 component={PYQPapersScreen}
                 options={{ title: 'PYQ Papers' }}
             />
+            <Stack.Screen
+                name="MockTestPapers"
+                component={MockTestPapersScreen}
+                options={{ title: 'Mock Test Papers' }}
+            />
+
         </Stack.Navigator>
     );
 }
