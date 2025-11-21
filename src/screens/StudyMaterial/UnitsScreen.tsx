@@ -170,8 +170,7 @@
 // });
 
 
-
-// src/screens/MCQ/UnitsScreen.tsx  (or src/screens/UnitsScreen.tsx if that's your path)
+// src/screens/MCQ/UnitsScreen.tsx 
 import React, { useEffect, useState } from 'react';
 import {
     View,
@@ -202,7 +201,6 @@ export default function UnitsScreen({ route, navigation }: Props) {
                 setLoading(true);
                 setError(null);
 
-                // 🔍 find subject in static SUBJECTS list
                 const subject: Subject | undefined = SUBJECTS.find(
                     s => s.id === subjectId,
                 );
@@ -213,7 +211,6 @@ export default function UnitsScreen({ route, navigation }: Props) {
                     return;
                 }
 
-                // units for this subject
                 setUnits(subject.units || []);
             } catch (e: any) {
                 console.error('[UnitsScreen] Failed to load units from demo.ts', e);
@@ -237,7 +234,7 @@ export default function UnitsScreen({ route, navigation }: Props) {
         return (
             <View style={styles.center}>
                 <ActivityIndicator />
-                <Text style={{ marginTop: 8 }}>Loading units...</Text>
+                <Text style={styles.centerText}>Loading units...</Text>
             </View>
         );
     }
@@ -245,7 +242,7 @@ export default function UnitsScreen({ route, navigation }: Props) {
     if (error) {
         return (
             <View style={styles.center}>
-                <Text>{error}</Text>
+                <Text style={styles.errorText}>{error}</Text>
             </View>
         );
     }
@@ -253,7 +250,10 @@ export default function UnitsScreen({ route, navigation }: Props) {
     if (!units.length) {
         return (
             <View style={styles.center}>
-                <Text>No units found for this subject in demo data.</Text>
+                <Text style={styles.centerText}>
+                    No units found for this subject in demo data.
+                </Text>
+                {/* You can also show the Home button here if you want – optional */}
             </View>
         );
     }
@@ -263,32 +263,103 @@ export default function UnitsScreen({ route, navigation }: Props) {
             <FlatList
                 data={units}
                 keyExtractor={u => u.id}
-                renderItem={({ item }) => (
+                contentContainerStyle={{ paddingBottom: 80 }} // extra space so FAB doesn't cover last row
+                renderItem={({ item, index }) => (
                     <TouchableOpacity
                         style={styles.row}
+                        activeOpacity={0.8}
                         onPress={() => handlePressUnit(item)}
                     >
-                        <Text>{item.name}</Text>
+                        <Text style={styles.unitIndex}>Unit {index + 1}</Text>
+                        <Text style={styles.unitName}>{item.name}</Text>
                     </TouchableOpacity>
                 )}
             />
+
+            {/* 🔹 Floating Home button (bottom-right) */}
+            <TouchableOpacity
+                style={styles.fab}
+                activeOpacity={0.85}
+                onPress={() => navigation.navigate('HomeTabs')}
+            >
+                <Text style={styles.fabText}>Home</Text>
+            </TouchableOpacity>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    c: { flex: 1, padding: 16 },
-    row: {
+    // 🔹 main screen wrapper – light background
+    c: {
+        flex: 1,
         padding: 16,
-        borderWidth: 1,
-        borderColor: '#eee',
-        borderRadius: 10,
-        marginBottom: 10,
+        backgroundColor: '#F9FAFB',
     },
+
+    // unit card
+    row: {
+        paddingVertical: 14,
+        paddingHorizontal: 12,
+        borderRadius: 12,
+        marginBottom: 10,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    unitIndex: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginBottom: 2,
+        fontWeight: '500',
+    },
+    unitName: {
+        fontSize: 15,
+        color: '#111827',
+        fontWeight: '600',
+    },
+
+    // loading / error / empty
     center: {
         flex: 1,
         padding: 16,
         alignItems: 'center',
         justifyContent: 'center',
+        backgroundColor: '#F9FAFB',
+    },
+    centerText: {
+        marginTop: 8,
+        fontSize: 13,
+        color: '#4B5563',
+        textAlign: 'center',
+    },
+    errorText: {
+        marginTop: 8,
+        fontSize: 13,
+        color: '#DC2626',
+        textAlign: 'center',
+    },
+
+    // 🔹 Floating Home button
+    fab: {
+        position: 'absolute',
+        bottom: 24,
+        right: 24,
+        backgroundColor: '#4F46E5',
+        paddingVertical: 10,
+        paddingHorizontal: 18,
+        borderRadius: 999,
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.5,
+    },
+    fabText: {
+        color: '#F9FAFB',
+        fontWeight: '700',
+        fontSize: 13,
     },
 });
+
+
+// export default UnitsScreen;

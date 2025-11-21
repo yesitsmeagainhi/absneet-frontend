@@ -1,245 +1,3 @@
-// // import React from 'react';
-// // import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-native';
-// // import Banner from '../../components/Banner';
-// // import SubjectChip from '../../components/SubjectChip';
-// // import { SUBJECTS } from '../../data/demo';
-// // import { useNavigation } from '@react-navigation/native';
-// // import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-// // import { RootStackParamList } from '../../navigation/rootnavigator';
-
-
-// // export default function HomeScreen() {
-// //     const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-
-
-// //     return (
-// //         <ScrollView contentContainerStyle={styles.c}>
-// //             <Banner title="Banners" />
-
-
-// //             <Text style={styles.h}>Subjects</Text>
-// //             <FlatList
-// //                 data={SUBJECTS}
-// //                 keyExtractor={s => s.id}
-// //                 horizontal
-// //                 showsHorizontalScrollIndicator={false}
-// //                 contentContainerStyle={{ paddingRight: 16 }}
-// //                 renderItem={({ item }) => (
-// //                     <SubjectChip label={item.name} onPress={() => nav.navigate('SubjectDetail', { subjectId: item.id })} />
-// //                 )}
-// //             />
-
-
-// //             <TouchableOpacity style={styles.btn} onPress={() => nav.navigate('SelectUnitsOrChapters', { subjectId: SUBJECTS[0].id })}>
-// //                 <Text>Customize MCQ As Per Subject</Text>
-// //             </TouchableOpacity>
-
-
-// //             <TouchableOpacity style={styles.btn} onPress={() => nav.navigate('PYQSubjects')}>
-// //                 <Text>Solve Previous Year MCQ</Text>
-// //             </TouchableOpacity>
-
-
-// //             <TouchableOpacity style={styles.btn} onPress={() => nav.navigate('PYQSubjects')}>
-// //                 <Text>Previous Year MCQ Papers</Text>
-// //             </TouchableOpacity>
-// //         </ScrollView>
-// //     );
-// // }
-// // const styles = StyleSheet.create({
-// //     c: { padding: 16, gap: 12 },
-// //     h: { fontSize: 16, fontWeight: '600', marginTop: 4, marginBottom: 8 },
-// //     btn: { borderWidth: 1, borderColor: '#ddd', padding: 14, borderRadius: 12, marginVertical: 6 },
-// // });
-
-
-
-//FiresTore Script
-// // src/screens/Home/HomeScreen.tsx
-// import React, { useEffect, useMemo, useState } from 'react';
-// import {
-//     View,
-//     Text,
-//     StyleSheet,
-//     FlatList,
-//     TouchableOpacity,
-//     ScrollView,
-//     ActivityIndicator,
-// } from 'react-native';
-// import Banner from '../../components/Banner';
-// import SubjectChip from '../../components/SubjectChip';
-// import { useNavigation } from '@react-navigation/native';
-// import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-// import { RootStackParamList } from '../../navigation/rootnavigator';
-
-// // 🔗 compat Firestore instance (from your earlier setup)
-// import { db } from '../../services/firebase.native';
-
-// type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-// type SubjectDoc = {
-//     id: string;
-//     name: string;      // expected field in your docs
-//     order?: number;    // optional for sorting
-//     slug?: string;
-//     active?: boolean;
-// };
-
-// export default function HomeScreen() {
-//     const nav = useNavigation<Nav>();
-
-//     const [subjects, setSubjects] = useState<SubjectDoc[]>([]);
-//     const [loading, setLoading] = useState(true);
-//     const [err, setErr] = useState<string | null>(null);
-
-//     // live subscribe to subjects (nodes where type === 'subject')
-//     useEffect(() => {
-//         try {
-//             const q = db
-//                 .collection('nodes')
-//                 .where('type', '==', 'subject')
-//                 // If you have an 'order' field, this sorts them nicely. If not, remove.
-//                 .orderBy('order', 'asc');
-
-//             const unsub = q.onSnapshot(
-//                 (snap) => {
-//                     const rows: SubjectDoc[] = snap.docs.map((d) => {
-//                         const data: any = d.data() || {};
-//                         return {
-//                             id: d.id,
-//                             name: data.name ?? data.title ?? 'Untitled',
-//                             order: data.order,
-//                             slug: data.slug,
-//                             active: data.active,
-//                         };
-//                     });
-//                     setSubjects(rows);
-//                     setLoading(false);
-//                 },
-//                 (e) => {
-//                     console.log('[Home] subjects onSnapshot error:', e);
-//                     setErr(e?.message || 'Failed to load subjects');
-//                     setLoading(false);
-//                 }
-//             );
-
-//             return unsub;
-//         } catch (e: any) {
-//             console.log('[Home] subjects subscribe error:', e);
-//             setErr(e?.message || 'Failed to load subjects');
-//             setLoading(false);
-//         }
-//     }, []);
-
-//     const firstSubjectId = useMemo(() => subjects[0]?.id, [subjects]);
-
-//     return (
-//         <ScrollView contentContainerStyle={styles.c}>
-//             {/* Top banner (you can swap to a Firestore-backed banner later) */}
-//             <Banner title="Banners" />
-
-//             {err ? (
-//                 <View style={styles.warn}>
-//                     <Text style={{ color: '#7a271a' }}>{err}</Text>
-//                 </View>
-//             ) : null}
-
-//             <Text style={styles.h}>Subjects</Text>
-
-//             {loading ? (
-//                 <View style={{ paddingVertical: 24 }}>
-//                     <ActivityIndicator />
-//                 </View>
-//             ) : subjects.length === 0 ? (
-//                 <View style={styles.empty}>
-//                     <Text style={{ color: '#666' }}>No subjects found.</Text>
-//                     <Text style={{ color: '#888', marginTop: 4 }}>
-//                         Add documents in <Text style={{ fontWeight: '700' }}>nodes</Text> with{' '}
-//                         <Text style={{ fontWeight: '700' }}>type = "subject"</Text> and a{' '}
-//                         <Text style={{ fontWeight: '700' }}>name</Text> field.
-//                     </Text>
-//                 </View>
-//             ) : (
-//                 <FlatList
-//                     data={subjects}
-//                     keyExtractor={(s) => s.id}
-//                     horizontal
-//                     showsHorizontalScrollIndicator={false}
-//                     contentContainerStyle={{ paddingRight: 16 }}
-//                     renderItem={({ item }) => (
-//                         <SubjectChip
-//                             label={item.name}
-//                             onPress={() => nav.navigate('SubjectDetail', { subjectId: item.id })}
-//                         />
-//                     )}
-//                 />
-//             )}
-
-//             <TouchableOpacity
-//                 style={[styles.btn, !firstSubjectId && { opacity: 0.5 }]}
-//                 disabled={!firstSubjectId}
-//                 onPress={() =>
-//                     nav.navigate('SelectUnitsOrChapters', { subjectId: firstSubjectId! })
-//                 }
-//             >
-//                 <TouchableOpacity
-//                     style={[styles.btn, !firstSubjectId && { opacity: 0.5 }]}
-//                     disabled={!firstSubjectId}
-//                     onPress={() =>
-//                         nav.navigate('CustomMCQQuiz', { subjectId: firstSubjectId! })
-//                     }
-//                 >
-//                     <Text>Customize MCQ As Per Subject</Text>
-//                 </TouchableOpacity>
-
-
-//             </TouchableOpacity>
-
-//             <TouchableOpacity style={styles.btn} onPress={() => nav.navigate('PYQSubjects')}>
-//                 <Text>Solve Previous Year MCQ</Text>
-//             </TouchableOpacity>
-
-//             <TouchableOpacity
-//                 style={styles.btn}
-//                 onPress={() => nav.navigate('PYQPdfPapers')}
-//             >
-//                 <Text>Previous Year MCQ Papers</Text>
-//             </TouchableOpacity>
-
-//         </ScrollView>
-//     );
-// }
-
-// const styles = StyleSheet.create({
-//     c: { padding: 16, gap: 12 },
-//     h: { fontSize: 16, fontWeight: '600', marginTop: 4, marginBottom: 8 },
-//     btn: {
-//         borderWidth: 1,
-//         borderColor: '#ddd',
-//         padding: 14,
-//         borderRadius: 12,
-//         marginVertical: 6,
-//         backgroundColor: '#fff',
-//     },
-//     empty: {
-//         borderWidth: 1,
-//         borderColor: '#eee',
-//         borderRadius: 12,
-//         padding: 14,
-//         backgroundColor: '#fcfcfc',
-//         marginBottom: 8,
-//     },
-//     warn: {
-//         backgroundColor: '#fee2e2',
-//         borderColor: '#fecaca',
-//         borderWidth: 1,
-//         padding: 10,
-//         borderRadius: 10,
-//     },
-// });
-
-
-
 // src/screens/Home/HomeScreen.tsx
 import React, { useMemo } from 'react';
 import {
@@ -247,11 +5,11 @@ import {
     Text,
     StyleSheet,
     FlatList,
-    TouchableOpacity,
     ScrollView,
+    Image,
+    Pressable,
 } from 'react-native';
-import Banner from '../../components/Banner';
-import SubjectChip from '../../components/SubjectChip';
+// import SubjectChip from '../../components/SubjectChip'; // 🔸 no longer used
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/rootnavigator';
@@ -260,6 +18,24 @@ import { RootStackParamList } from '../../navigation/rootnavigator';
 import { SUBJECTS, Subject } from '../../data/demo';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+type HomeBanner = {
+    id: string;
+    imageUri: string;
+};
+
+const HOME_BANNERS: HomeBanner[] = [
+    {
+        id: 'b2',
+        imageUri:
+            'https://images.pexels.com/photos/5496463/pexels-photo-5496463.jpeg?auto=compress&cs=tinysrgb&w=800',
+    },
+    {
+        id: 'b3',
+        imageUri:
+            'https://images.pexels.com/photos/4143791/pexels-photo-4143791.jpeg?auto=compress&cs=tinysrgb&w=800',
+    },
+];
 
 export default function HomeScreen() {
     const nav = useNavigation<Nav>();
@@ -278,39 +54,34 @@ export default function HomeScreen() {
                 <View style={styles.topBar}>
                     <View>
                         <Text style={styles.appTitle}>ABS NEET</Text>
-                        <Text style={styles.appSubtitle}>Smart Practice App</Text>
+                        <Text style={styles.appSubtitle}>NEET Practice App</Text>
                     </View>
                     <View style={styles.neetBadge}>
                         <Text style={styles.neetBadgeText}>NEET 2025</Text>
                     </View>
                 </View>
 
-                {/* Banner (your slider / promos) */}
+                {/* 🔹 Image-only banner slider */}
                 <View style={styles.bannerWrap}>
-                    <Banner title="Boost your NEET score this week" />
-                </View>
-
-                {/* Hero / main highlight */}
-                <View style={styles.heroCard}>
-                    <Text style={styles.heroEyebrow}>Today’s Focus</Text>
-                    <Text style={styles.heroTitle}>
-                        Crack NEET with daily mock tests & chapter-wise practice.
-                    </Text>
-                    <Text style={styles.heroSubtitle}>
-                        Start with mixed PYQ exams for real exam feel, then fix your weak
-                        topics using subject and chapter quizzes.
-                    </Text>
-
-                    <View style={styles.heroStatsRow}>
-                        <View style={styles.heroPill}>
-                            <Text style={styles.heroPillLabel}>Practice Modes</Text>
-                            <Text style={styles.heroPillValue}>4</Text>
-                        </View>
-                        <View style={styles.heroPill}>
-                            <Text style={styles.heroPillLabel}>Subjects</Text>
-                            <Text style={styles.heroPillValue}>{subjects.length || 0}</Text>
-                        </View>
-                    </View>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.bannerScroll}
+                    >
+                        {HOME_BANNERS.map(b => (
+                            <Pressable
+                                key={b.id}
+                                style={styles.bannerCard}
+                                android_ripple={{ color: '#1E293B' }}
+                            >
+                                <Image
+                                    source={{ uri: b.imageUri }}
+                                    style={styles.bannerImage}
+                                    resizeMode="cover"
+                                />
+                            </Pressable>
+                        ))}
+                    </ScrollView>
                 </View>
 
                 {/* Subjects row */}
@@ -334,17 +105,25 @@ export default function HomeScreen() {
                 ) : (
                     <FlatList
                         data={subjects}
-                        keyExtractor={(s) => s.id}
+                        keyExtractor={s => s.id}
                         horizontal
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={{ paddingRight: 16 }}
                         renderItem={({ item }) => (
-                            <SubjectChip
-                                label={item.name}
+                            <Pressable
+                                style={({ pressed }) => [
+                                    styles.subjectCard,
+                                    pressed && styles.subjectCardPressed, // 🔹 purple when pressed
+                                ]}
                                 onPress={() =>
                                     nav.navigate('SubjectDetail', { subjectId: item.id })
                                 }
-                            />
+                            >
+                                <Text style={styles.subjectTitle}>{item.name}</Text>
+                                <Text style={styles.subjectMeta}>
+                                    {item.units?.length ?? 0} units
+                                </Text>
+                            </Pressable>
                         )}
                     />
                 )}
@@ -357,14 +136,14 @@ export default function HomeScreen() {
 
                 <View style={styles.cardGrid}>
                     {/* Custom MCQ as per Subject */}
-                    <TouchableOpacity
-                        style={[
+                    <Pressable
+                        style={({ pressed }) => [
                             styles.modeCard,
                             styles.modeCardPrimary,
                             isSubjectDependentDisabled && styles.modeCardDisabled,
+                            pressed && !isSubjectDependentDisabled && styles.modeCardPrimaryPressed,
                         ]}
                         disabled={isSubjectDependentDisabled}
-                        activeOpacity={0.85}
                         onPress={() =>
                             firstSubjectId &&
                             nav.navigate('CustomMCQQuiz', { subjectId: firstSubjectId })
@@ -380,12 +159,15 @@ export default function HomeScreen() {
                                 Add at least one subject to begin.
                             </Text>
                         )}
-                    </TouchableOpacity>
+                    </Pressable>
 
                     {/* Previous Year MCQ – mixed exam */}
-                    <TouchableOpacity
-                        style={[styles.modeCard, styles.modeCardAccent]}
-                        activeOpacity={0.85}
+                    <Pressable
+                        style={({ pressed }) => [
+                            styles.modeCard,
+                            styles.modeCardAccent,
+                            pressed && styles.modeCardPrimary,
+                        ]}
                         onPress={() => nav.navigate('PYQSubjects')}
                     >
                         <Text style={styles.modeEmoji}>📜</Text>
@@ -394,12 +176,15 @@ export default function HomeScreen() {
                             Solve full NEET-style mixed MCQ sets (Physics + Chemistry + Bio).
                         </Text>
                         <Text style={styles.modeHint}>Best for real exam practice</Text>
-                    </TouchableOpacity>
+                    </Pressable>
 
                     {/* Previous Year MCQ Papers PDF */}
-                    <TouchableOpacity
-                        style={[styles.modeCard, styles.modeCardNeutral]}
-                        activeOpacity={0.85}
+                    <Pressable
+                        style={({ pressed }) => [
+                            styles.modeCard,
+                            styles.modeCardNeutral,
+                            pressed && styles.modeCardPrimary,
+                        ]}
                         onPress={() => nav.navigate('PYQPdfPapers')}
                     >
                         <Text style={styles.modeEmoji}>📂</Text>
@@ -408,12 +193,15 @@ export default function HomeScreen() {
                             Download complete NEET papers in PDF for offline solving.
                         </Text>
                         <Text style={styles.modeHint}>Use with OMR sheets</Text>
-                    </TouchableOpacity>
+                    </Pressable>
 
                     {/* Mock Test Papers */}
-                    <TouchableOpacity
-                        style={[styles.modeCard, styles.modeCardNeutral]}
-                        activeOpacity={0.85}
+                    <Pressable
+                        style={({ pressed }) => [
+                            styles.modeCard,
+                            styles.modeCardNeutral,
+                            pressed && styles.modeCardPrimary,
+                        ]}
                         onPress={() => nav.navigate('MockTestPapers')}
                     >
                         <Text style={styles.modeEmoji}>📝</Text>
@@ -422,25 +210,8 @@ export default function HomeScreen() {
                             Attempt full-length mock tests and track improvement.
                         </Text>
                         <Text style={styles.modeHint}>Perfect for weekend practice</Text>
-                    </TouchableOpacity>
+                    </Pressable>
                 </View>
-
-                {/* Info strip */}
-                {/* <View style={styles.infoStrip}>
-                    <Text style={styles.infoStripText}>
-                        Tip: Do 1 mixed PYQ paper every 2–3 days, then revise your mistakes
-                        with chapter-wise MCQs.
-                    </Text>
-                </View> */}
-
-                {/* Big CTA button at bottom */}
-                {/* <TouchableOpacity
-                    style={styles.primaryCta}
-                    activeOpacity={0.9}
-                    onPress={() => nav.navigate('MockTestPapers')}
-                >
-                    <Text style={styles.primaryCtaText}>Start Full Mock Test Now</Text>
-                </TouchableOpacity> */}
             </ScrollView>
         </View>
     );
@@ -449,7 +220,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
     screen: {
         flex: 1,
-        backgroundColor: '#0F172A', // darker base so content pops
+        backgroundColor: '#0F172A',
     },
     c: {
         padding: 16,
@@ -486,59 +257,26 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
 
+    // 🔹 Banner slider (image only)
     bannerWrap: {
-        borderRadius: 16,
-        overflow: 'hidden',
         marginBottom: 4,
     },
-
-    // Hero
-    heroCard: {
-        backgroundColor: '#111827',
+    bannerScroll: {
+        paddingRight: 16,
+    },
+    bannerCard: {
+        width: 320,
+        height: 150,
+        marginRight: 12,
         borderRadius: 18,
-        padding: 14,
+        overflow: 'hidden',
+        backgroundColor: '#020617',
         borderWidth: 1,
-        borderColor: '#1D4ED8',
+        borderColor: '#38BDF8',
     },
-    heroEyebrow: {
-        fontSize: 11,
-        color: '#93C5FD',
-        marginBottom: 4,
-        fontWeight: '600',
-    },
-    heroTitle: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: '#F9FAFB',
-        marginBottom: 6,
-    },
-    heroSubtitle: {
-        fontSize: 13,
-        color: '#E5E7EB',
-    },
-    heroStatsRow: {
-        flexDirection: 'row',
-        marginTop: 10,
-        gap: 8,
-    },
-    heroPill: {
-        flex: 1,
-        paddingVertical: 8,
-        paddingHorizontal: 10,
-        borderRadius: 999,
-        backgroundColor: '#1F2937',
-        borderWidth: 1,
-        borderColor: '#4B5563',
-    },
-    heroPillLabel: {
-        fontSize: 11,
-        color: '#9CA3AF',
-    },
-    heroPillValue: {
-        fontSize: 15,
-        fontWeight: '700',
-        color: '#F9FAFB',
-        marginTop: 2,
+    bannerImage: {
+        width: '100%',
+        height: '100%',
     },
 
     // Sections
@@ -568,6 +306,33 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
 
+    // 🔹 Subject cards (now match practice-mode “card” look)
+    subjectCard: {
+        minWidth: 130,
+        minHeight: 80,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 14,
+        marginRight: 10,
+        backgroundColor: '#020617',
+        borderWidth: 3,
+        borderColor: '#374151',
+    },
+    subjectCardPressed: {
+        backgroundColor: '#374151',
+        borderColor: '#374151',
+    },
+    subjectTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#F9FAFB',
+    },
+    subjectMeta: {
+        fontSize: 11,
+        color: '#9CA3AF',
+        marginTop: 2,
+    },
+
     // Practice modes grid
     cardGrid: {
         flexDirection: 'row',
@@ -581,11 +346,12 @@ const styles = StyleSheet.create({
         paddingHorizontal: 10,
         borderWidth: 1,
     },
-
-    // Primary accent card (dark with bright text)
     modeCardPrimary: {
         backgroundColor: '#4F46E5',
         borderColor: '#4338CA',
+    },
+    modeCardPrimaryPressed: {
+        backgroundColor: '#4338CA',
     },
     modeTitlePrimary: {
         fontSize: 14,
@@ -603,7 +369,6 @@ const styles = StyleSheet.create({
         marginTop: 6,
     },
 
-    // Secondary cards
     modeCardAccent: {
         backgroundColor: '#0F172A',
         borderColor: '#38BDF8',
@@ -634,33 +399,5 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: '#9CA3AF',
         marginTop: 6,
-    },
-
-    // Info strip
-    infoStrip: {
-        marginTop: 14,
-        padding: 10,
-        borderRadius: 10,
-        backgroundColor: '#022C22',
-        borderWidth: 1,
-        borderColor: '#16A34A',
-    },
-    infoStripText: {
-        fontSize: 12,
-        color: '#BBF7D0',
-    },
-
-    // Primary CTA
-    primaryCta: {
-        marginTop: 14,
-        paddingVertical: 13,
-        borderRadius: 999,
-        backgroundColor: '#22C55E',
-        alignItems: 'center',
-    },
-    primaryCtaText: {
-        color: '#022C22',
-        fontWeight: '700',
-        fontSize: 15,
     },
 });

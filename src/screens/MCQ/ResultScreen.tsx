@@ -52,7 +52,6 @@
 //   },
 // });
 
-
 // src/screens/MCQ/ResultScreen.tsx
 import React from 'react';
 import {
@@ -82,6 +81,11 @@ export default function ResultScreen({ route, navigation }: Props) {
   const { correct, total, questions, answers, title } =
     route.params as ResultParams;
 
+  // 🔹 Derived stats
+  const attempted = answers.filter((a) => a >= 0).length;
+  const skipped = Math.max(total - attempted, 0);
+  const incorrect = Math.max(attempted - correct, 0);
+  const finalScore = correct; // 1 mark per correct question
   const accuracy =
     total > 0 ? ((correct / total) * 100).toFixed(1) : '0.0';
 
@@ -89,13 +93,39 @@ export default function ResultScreen({ route, navigation }: Props) {
     <View style={styles.c}>
       {/* Summary */}
       <View style={styles.summaryCard}>
-        {title ? (
-          <Text style={styles.summaryTitle}>{title}</Text>
-        ) : null}
+        {title ? <Text style={styles.summaryTitle}>{title}</Text> : null}
+
         <Text style={styles.summaryScore}>
-          Score: {correct} / {total}
+          Final Score: {finalScore} / {total}
         </Text>
         <Text style={styles.summarySub}>Accuracy: {accuracy}%</Text>
+
+        {/* 🔹 Stats grid */}
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>Attempted</Text>
+            <Text style={styles.statValue}>{attempted}</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>Skipped</Text>
+            <Text style={styles.statValue}>{skipped}</Text>
+          </View>
+        </View>
+
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>Correct</Text>
+            <Text style={[styles.statValue, { color: '#16A34A' }]}>
+              {correct}
+            </Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>Incorrect</Text>
+            <Text style={[styles.statValue, { color: '#DC2626' }]}>
+              {incorrect}
+            </Text>
+          </View>
+        </View>
       </View>
 
       {/* Review list */}
@@ -111,10 +141,9 @@ export default function ResultScreen({ route, navigation }: Props) {
             userAnswered ? q.options[selectedIndex] : null;
           const correctOptionText = q.options[correctIndex];
 
-          const userLabel =
-            userAnswered
-              ? `${String.fromCharCode(65 + selectedIndex)}. ${userOptionText}`
-              : 'Not answered';
+          const userLabel = userAnswered
+            ? `${String.fromCharCode(65 + selectedIndex)}. ${userOptionText}`
+            : 'Not answered';
 
           const correctLabel = `${String.fromCharCode(
             65 + correctIndex,
@@ -204,6 +233,29 @@ const styles = StyleSheet.create({
   summarySub: {
     fontSize: 13,
     color: '#4B5563',
+    marginTop: 2,
+  },
+
+  statsRow: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 8,
+  },
+  statBox: {
+    flex: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: '#E0E7FF',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#4B5563',
+  },
+  statValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
     marginTop: 2,
   },
 

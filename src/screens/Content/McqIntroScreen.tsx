@@ -128,10 +128,15 @@
 //   },
 // };
 
-
 // src/screens/Content/McqIntroScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { View, Text, Button, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  ActivityIndicator,
+  StyleSheet,
+  TouchableOpacity,
+} from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/RootNavigator';
@@ -207,8 +212,8 @@ export default function McqIntroScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator />
-        <Text style={{ marginTop: 8 }}>Loading MCQs…</Text>
+        <ActivityIndicator color="#4F46E5" />
+        <Text style={styles.helperText}>Loading MCQs…</Text>
       </View>
     );
   }
@@ -216,7 +221,7 @@ export default function McqIntroScreen() {
   if (error || !subjectId || !chapterId) {
     return (
       <View style={styles.center}>
-        <Text>{error || 'Missing chapter selection.'}</Text>
+        <Text style={styles.errorText}>{error || 'Missing chapter selection.'}</Text>
       </View>
     );
   }
@@ -224,34 +229,136 @@ export default function McqIntroScreen() {
   const count = chapter?.questions?.length || 0;
 
   return (
-    <View style={styles.center}>
-      <Text style={{ fontSize: 16, marginBottom: 6 }}>
-        {chapter?.name || 'MCQ for selected chapter'}
-      </Text>
-      <Text style={{ marginBottom: 12 }}>
-        Total questions: {count}
-      </Text>
-      <Button
-        title={count > 0 ? 'Start MCQ' : 'No MCQs available'}
-        disabled={count === 0}
-        onPress={() =>
-          nav.navigate('MCQQuiz', {
-            subjectId,
-            unitId,
-            chapterId,
-          })
-        }
-      />
+    <View style={styles.screen}>
+      <View style={styles.card}>
+        <Text style={styles.badge}>Chapter MCQ</Text>
+
+        <Text style={styles.title}>
+          {chapter?.name || 'MCQ for selected chapter'}
+        </Text>
+
+        <Text style={styles.metaText}>
+          Total questions:{' '}
+          <Text style={styles.metaStrong}>{count}</Text>
+        </Text>
+
+        <Text style={styles.subText}>
+          Solve all questions from this chapter in exam-style MCQ format.
+        </Text>
+
+        <TouchableOpacity
+          style={[
+            styles.primaryBtn,
+            count === 0 && styles.primaryBtnDisabled,
+          ]}
+          disabled={count === 0}
+          onPress={() =>
+            nav.navigate('MCQQuiz', {
+              subjectId,
+              unitId,
+              chapterId,
+            })
+          }
+        >
+          <Text style={styles.primaryBtnText}>
+            {count > 0 ? 'Start MCQ' : 'No MCQs available'}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
-const styles = {
+const styles = StyleSheet.create({
+  // full screen – white / light background
+  screen: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+    padding: 16,
+    // justifyContent: 'center',
+  },
+
+  // central card
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+
+  badge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#EEF2FF',
+    color: '#4F46E5',
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+
+  title: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 6,
+  },
+
+  metaText: {
+    fontSize: 13,
+    color: '#4B5563',
+    marginBottom: 4,
+  },
+
+  metaStrong: {
+    fontWeight: '700',
+    color: '#111827',
+  },
+
+  subText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 16,
+  },
+
+  // primary button
+  primaryBtn: {
+    marginTop: 4,
+    backgroundColor: '#4F46E5',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  primaryBtnDisabled: {
+    backgroundColor: '#9CA3AF',
+  },
+  primaryBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+
+  // loading / error shared
   center: {
     flex: 1,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 16,
-    gap: 12,
   },
-};
+  helperText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: '#4B5563',
+    textAlign: 'center',
+  },
+  errorText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: '#DC2626',
+    textAlign: 'center',
+  },
+});
