@@ -659,8 +659,6 @@
 //         fontSize: 15,
 //     },
 // });
-
-
 // src/screens/MCQ/CustomMCQselectScreen.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -683,6 +681,8 @@ import {
     Chapter,
     Question as DemoQuestionType,
 } from '../../data/demo';
+
+import { useTheme } from '../../theme/ThemeContext'; // ✅ global theme
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CustomMCQQuiz'>;
 
@@ -714,44 +714,10 @@ type ChapterNode = {
 
 type Option = { id: string; label: string };
 
-// Simple pill chip
-function Chip({
-    label,
-    selected,
-    disabled,
-    onPress,
-}: {
-    label: string;
-    selected: boolean;
-    disabled?: boolean;
-    onPress: () => void;
-}) {
-    return (
-        <TouchableOpacity
-            activeOpacity={0.8}
-            disabled={disabled}
-            onPress={onPress}
-            style={[
-                styles.chip,
-                selected && styles.chipSelected,
-                disabled && styles.chipDisabled,
-            ]}
-        >
-            <Text
-                numberOfLines={1}
-                style={[
-                    styles.chipText,
-                    selected && styles.chipTextSelected,
-                    disabled && styles.chipTextDisabled,
-                ]}
-            >
-                {label}
-            </Text>
-        </TouchableOpacity>
-    );
-}
-
 export default function CustomMCQQuizScreen({ navigation }: Props) {
+    const { isDark } = useTheme();                            // ✅ read theme
+    const styles = useMemo(() => createStyles(isDark), [isDark]); // ✅ themed styles
+
     const [loadingMeta, setLoadingMeta] = useState(true);
     const [subjects, setSubjects] = useState<SubjectNode[]>([]);
     const [units, setUnits] = useState<UnitNode[]>([]);
@@ -925,6 +891,42 @@ export default function CustomMCQQuizScreen({ navigation }: Props) {
         });
     };
 
+    // -------- Chip component (theme-aware via styles) --------
+
+    const Chip = ({
+        label,
+        selected,
+        disabled,
+        onPress,
+    }: {
+        label: string;
+        selected: boolean;
+        disabled?: boolean;
+        onPress: () => void;
+    }) => (
+        <TouchableOpacity
+            activeOpacity={0.8}
+            disabled={disabled}
+            onPress={onPress}
+            style={[
+                styles.chip,
+                selected && styles.chipSelected,
+                disabled && styles.chipDisabled,
+            ]}
+        >
+            <Text
+                numberOfLines={1}
+                style={[
+                    styles.chipText,
+                    selected && styles.chipTextSelected,
+                    disabled && styles.chipTextDisabled,
+                ]}
+            >
+                {label}
+            </Text>
+        </TouchableOpacity>
+    );
+
     // -------- BUILD QUESTIONS AND GO TO MCQ QUIZ --------
 
     const handleStartQuiz = () => {
@@ -954,7 +956,7 @@ export default function CustomMCQQuizScreen({ navigation }: Props) {
             (ch.questions || []).forEach((qObj, idx) => {
                 collected.push({
                     ...qObj,
-                    // ✅ ensure unique id across the whole quiz (avoids duplicate-key warnings later)
+                    // ✅ ensure unique id across the whole quiz
                     id: qObj.id || `${ch.id}_${idx}`,
                 });
             });
@@ -994,7 +996,7 @@ export default function CustomMCQQuizScreen({ navigation }: Props) {
 
                 {loadingMeta ? (
                     <View style={styles.center}>
-                        <ActivityIndicator size="large" />
+                        <ActivityIndicator size="large" color={isDark ? '#E5E7EB' : '#4B5563'} />
                         <Text style={styles.centerText}>Loading structure...</Text>
                     </View>
                 ) : (
@@ -1168,159 +1170,161 @@ export default function CustomMCQQuizScreen({ navigation }: Props) {
     );
 }
 
-// -------- STYLES --------
+// -------- THEME-AWARE STYLES --------
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F3F4F6',
-    },
-    scrollContent: {
-        paddingHorizontal: 16,
-        paddingTop: 16,
-        paddingBottom: 24,
-    },
+const createStyles = (isDark: boolean) =>
+    StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: isDark ? '#020617' : '#F3F4F6',
+        },
+        scrollContent: {
+            paddingHorizontal: 16,
+            paddingTop: 16,
+            paddingBottom: 24,
+        },
 
-    title: {
-        fontSize: 20,
-        fontWeight: '700',
-        marginBottom: 4,
-        color: '#111827',
-    },
-    subtitle: {
-        fontSize: 13,
-        color: '#6B7280',
-        marginBottom: 12,
-    },
+        title: {
+            fontSize: 20,
+            fontWeight: '700',
+            marginBottom: 4,
+            color: isDark ? '#F9FAFB' : '#111827',
+        },
+        subtitle: {
+            fontSize: 13,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            marginBottom: 12,
+        },
 
-    center: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 32,
-    },
-    centerText: {
-        marginTop: 8,
-        fontSize: 13,
-        color: '#6B7280',
-    },
+        center: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 32,
+        },
+        centerText: {
+            marginTop: 8,
+            fontSize: 13,
+            color: isDark ? '#E5E7EB' : '#6B7280',
+        },
 
-    stepCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 14,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        marginBottom: 12,
-    },
-    stepHeaderRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    stepCircle: {
-        width: 22,
-        height: 22,
-        borderRadius: 11,
-        borderWidth: 1,
-        borderColor: '#9CA3AF',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 8,
-        backgroundColor: '#F9FAFB',
-    },
-    stepCircleActive: {
-        backgroundColor: '#6D28D9',
-        borderColor: '#6D28D9',
-    },
-    stepCircleText: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: '#4B5563',
-    },
-    stepTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#111827',
-    },
-    stepSubtitleText: {
-        fontSize: 11,
-        color: '#9CA3AF',
-    },
-    stepCount: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#4B5563',
-        marginLeft: 8,
-    },
+        stepCard: {
+            backgroundColor: isDark ? '#020617' : '#FFFFFF',
+            borderRadius: 14,
+            paddingHorizontal: 14,
+            paddingVertical: 12,
+            borderWidth: 1,
+            borderColor: isDark ? '#1F2937' : '#E5E7EB',
+            marginBottom: 12,
+        },
+        stepHeaderRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 8,
+        },
+        stepCircle: {
+            width: 22,
+            height: 22,
+            borderRadius: 11,
+            borderWidth: 1,
+            borderColor: isDark ? '#9CA3AF' : '#9CA3AF',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: 8,
+            backgroundColor: isDark ? '#020617' : '#F9FAFB',
+        },
+        stepCircleActive: {
+            backgroundColor: '#6D28D9',
+            borderColor: '#6D28D9',
+        },
+        stepCircleText: {
+            fontSize: 12,
+            fontWeight: '700',
+            color: isDark ? '#E5E7EB' : '#4B5563',
+        },
+        stepTitle: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: isDark ? '#F9FAFB' : '#111827',
+        },
+        stepSubtitleText: {
+            fontSize: 11,
+            color: isDark ? '#9CA3AF' : '#9CA3AF',
+        },
+        stepCount: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: isDark ? '#E5E7EB' : '#4B5563',
+            marginLeft: 8,
+        },
 
-    helperText: {
-        fontSize: 11,
-        color: '#9CA3AF',
-        marginTop: 4,
-    },
-    emptyText: {
-        fontSize: 12,
-        color: '#9CA3AF',
-        marginTop: 4,
-    },
+        helperText: {
+            fontSize: 11,
+            color: isDark ? '#9CA3AF' : '#9CA3AF',
+            marginTop: 4,
+        },
+        emptyText: {
+            fontSize: 12,
+            color: isDark ? '#9CA3AF' : '#9CA3AF',
+            marginTop: 4,
+        },
 
-    chipContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        marginTop: 6,
-    },
-    chip: {
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 999,
-        borderWidth: 1,
-        borderColor: '#D1D5DB',
-        backgroundColor: '#F9FAFB',
-        marginRight: 6,
-        marginBottom: 6,
-    },
-    chipSelected: {
-        backgroundColor: '#6D28D9',
-        borderColor: '#6D28D9',
-    },
-    chipDisabled: {
-        backgroundColor: '#F3F4F6',
-        borderColor: '#E5E7EB',
-    },
-    chipText: {
-        fontSize: 12,
-        color: '#374151',
-    },
-    chipTextSelected: {
-        color: '#FFFFFF',
-        fontWeight: '600',
-    },
-    chipTextDisabled: {
-        color: '#9CA3AF',
-    },
+        chipContainer: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            marginTop: 6,
+        },
+        chip: {
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: isDark ? '#374151' : '#D1D5DB',
+            backgroundColor: isDark ? '#020617' : '#F9FAFB',
+            marginRight: 6,
+            marginBottom: 6,
+        },
+        chipSelected: {
+            backgroundColor: '#6D28D9',
+            borderColor: '#6D28D9',
+        },
+        chipDisabled: {
+            backgroundColor: isDark ? '#111827' : '#F3F4F6',
+            borderColor: isDark ? '#1F2937' : '#E5E7EB',
+        },
+        chipText: {
+            fontSize: 12,
+            color: isDark ? '#E5E7EB' : '#374151',
+        },
+        chipTextSelected: {
+            color: '#FFFFFF',
+            fontWeight: '600',
+        },
+        chipTextDisabled: {
+            color: isDark ? '#6B7280' : '#9CA3AF',
+        },
 
-    footer: {
-        paddingHorizontal: 16,
-        paddingBottom: 16,
-        paddingTop: 8,
-        borderTopWidth: 1,
-        borderTopColor: '#E5E7EB',
-        backgroundColor: '#F9FAFB',
-    },
-    loadBtn: {
-        backgroundColor: '#6D28D9',
-        paddingVertical: 14,
-        borderRadius: 12,
-        alignItems: 'center',
-    },
-    loadBtnText: {
-        color: '#fff',
-        fontWeight: '600',
-        fontSize: 15,
-    },
-});
+        footer: {
+            paddingHorizontal: 16,
+            paddingBottom: 16,
+            paddingTop: 8,
+            borderTopWidth: 1,
+            borderTopColor: isDark ? '#1F2937' : '#E5E7EB',
+            backgroundColor: isDark ? '#020617' : '#F9FAFB',
+        },
+        loadBtn: {
+            backgroundColor: '#6D28D9',
+            paddingVertical: 14,
+            borderRadius: 12,
+            alignItems: 'center',
+        },
+        loadBtnText: {
+            color: '#fff',
+            fontWeight: '600',
+            fontSize: 15,
+        },
+    });
+
 
 //This script is fully accessible via firebase
 // src/screens/MCQ/CustomMCQselectScreen.tsx

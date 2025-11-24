@@ -44,18 +44,24 @@
 
 // export default App;
 
+// App.tsx (root of project, same folder as index.js and app.json)
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import RootNavigator from './src/navigation/rootnavigator';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import RootNavigator from './src/navigation/rootnavigator';
+import { ThemeProvider } from './src/theme/ThemeContext';
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer>
-        <RootNavigator />
-      </NavigationContainer>
-    </GestureHandlerRootView>
+    <SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider>
+          <NavigationContainer>
+            <RootNavigator />
+          </NavigationContainer>
+        </ThemeProvider>
+      </GestureHandlerRootView></SafeAreaProvider>
   );
 }

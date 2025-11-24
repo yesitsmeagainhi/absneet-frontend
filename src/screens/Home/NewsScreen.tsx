@@ -11,13 +11,15 @@ import {
     FlatList,
     Image,
     ListRenderItem,
-    StyleSheet,
     Text,
     TouchableOpacity,
     View,
+    StyleSheet,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context'; // ✅ NEW
 import type { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { db } from '../../services/firebase.native';
+import { useTheme } from '../../theme/ThemeContext';
 
 type NewsItem = {
     id: string;
@@ -43,6 +45,7 @@ function isIndexMissing(err: any) {
 }
 
 export default function NewsScreen() {
+    // 🔹 state hooks
     const [items, setItems] = useState<NewsItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -56,6 +59,11 @@ export default function NewsScreen() {
         null,
     );
 
+    // 🔹 theme
+    const { isDark } = useTheme();
+    const styles = useMemo(() => createStyles(isDark), [isDark]);
+
+    // 🔹 base Firestore query
     const baseQuery = useMemo(
         () =>
             db
@@ -68,7 +76,7 @@ export default function NewsScreen() {
     const mapDocs = (
         docs: FirebaseFirestoreTypes.DocumentSnapshot[],
     ): NewsItem[] =>
-        docs.map((d) => {
+        docs.map(d => {
             const data = (d.data() || {}) as any;
             return {
                 id: d.id,
@@ -103,7 +111,7 @@ export default function NewsScreen() {
             .limit(PAGE)
             .get();
         const rows = mapDocs(snap.docs);
-        setItems((prev) => [...prev, ...rows]);
+        setItems(prev => [...prev, ...rows]);
         lastDocRef.current = snap.docs.length
             ? snap.docs[snap.docs.length - 1]
             : lastDocRef.current;
@@ -115,7 +123,7 @@ export default function NewsScreen() {
         const q = db.collection('news').orderBy('createdAt', 'desc');
         const snap = await q.limit(Math.max(PAGE * 3, 30)).get();
         const allRows = mapDocs(snap.docs);
-        const filtered = allRows.filter((r) => r.published);
+        const filtered = allRows.filter(r => r.published);
         setItems(filtered.slice(0, PAGE));
         lastDocRef.current = snap.docs.length
             ? snap.docs[snap.docs.length - 1]
@@ -133,8 +141,8 @@ export default function NewsScreen() {
             .startAfter(lastDocRef.current);
         const snap = await q.limit(Math.max(PAGE * 3, 30)).get();
         const allRows = mapDocs(snap.docs);
-        const filtered = allRows.filter((r) => r.published);
-        setItems((prev) => [...prev, ...filtered.slice(0, PAGE)]);
+        const filtered = allRows.filter(r => r.published);
+        setItems(prev => [...prev, ...filtered.slice(0, PAGE)]);
         lastDocRef.current = snap.docs.length
             ? snap.docs[snap.docs.length - 1]
             : lastDocRef.current;
@@ -215,12 +223,10 @@ export default function NewsScreen() {
 
     // --- UI helpers ---
     const toggleExpand = (id: string) => {
-        setExpandedId((prev) => (prev === id ? null : id));
+        setExpandedId(prev => (prev === id ? null : id));
     };
 
     const renderItem: ListRenderItem<NewsItem> = ({ item }) => {
-        // const img = item.coverUrl || item.bannerUrl;
-        // treat empty strings / "null" / spaces as no image
         const rawImg = (item.coverUrl || item.bannerUrl || '').trim();
         const hasImage = rawImg.length > 5 && rawImg.startsWith('http');
         const img = hasImage ? rawImg : null;
@@ -239,16 +245,52 @@ export default function NewsScreen() {
         const isExpanded = expandedId === item.id;
         const fullText = item.content || item.summary || item.excerpt || '';
 
+        const authorName = item.author || 'ABS Team';
+        const authorInitial =
+            authorName.trim().length > 0
+                ? authorName.trim().charAt(0).toUpperCase()
+                : 'A';
+
         return (
-            <TouchableOpacity activeOpacity={0.9} onPress={() => toggleExpand(item.id)}>
+            <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => toggleExpand(item.id)}
+            >
                 <View style={[styles.card, isExpanded && styles.cardExpanded]}>
-                    {!!img && <Image source={{ uri: img }} style={styles.cover} />}
+                    {/* Cover image with overlay */}
+                    <View style={styles.coverWrapper}>
+                        {img ? (
+                            <Image source={{ uri: img }} style={styles.cover} />
+                        ) : (
+                            <View style={styles.coverPlaceholder}>
+                                <Text style={styles.coverPlaceholderText}>ABS NEWS</Text>
+                            </View>
+                        )}
+
+                        <View style={styles.coverOverlay}>
+                            {!!when && (
+                                <Text style={styles.coverDateChip}>{when}</Text>
+                            )}
+                            {isNew && <Text style={styles.coverNewChip}>NEW</Text>}
+                        </View>
+                    </View>
+
+                    {/* Card body */}
                     <View style={styles.cardBody}>
-                        <View style={styles.cardMetaRow}>
-                            {!!when && <Text style={styles.metaChip}>{when}</Text>}
-                            {isNew && <Text style={styles.metaChipNew}>NEW</Text>}
+                        {/* Author row */}
+                        <View style={styles.authorRow}>
+                            <View style={styles.avatarCircle}>
+                                <Text style={styles.avatarText}>{authorInitial}</Text>
+                            </View>
+                            <View style={styles.authorTextBlock}>
+                                <Text style={styles.authorName}>{authorName}</Text>
+                                {!!when && (
+                                    <Text style={styles.authorDate}>Updated • {when}</Text>
+                                )}
+                            </View>
                         </View>
 
+                        {/* Title & subtitle */}
                         <Text style={styles.title} numberOfLines={2}>
                             {item.title}
                         </Text>
@@ -259,12 +301,14 @@ export default function NewsScreen() {
                             </Text>
                         )}
 
+                        {/* Short preview */}
                         {!!(item.excerpt ?? item.summary) && !isExpanded && (
                             <Text style={styles.excerpt} numberOfLines={3}>
                                 {item.excerpt ?? item.summary}
                             </Text>
                         )}
 
+                        {/* Expanded content */}
                         {isExpanded && !!fullText && (
                             <View style={styles.expandedBlock}>
                                 <Text style={styles.expandedLabel}>Full update</Text>
@@ -272,10 +316,9 @@ export default function NewsScreen() {
                             </View>
                         )}
 
+                        {/* Bottom row */}
                         <View style={styles.bottomRow}>
-                            <Text style={styles.metaBottom}>
-                                {item.author ? `By ${item.author}` : 'ABS Team'}
-                            </Text>
+                            <Text style={styles.metaBottom}>ABS Newsroom</Text>
                             <Text style={styles.readMore}>
                                 {isExpanded ? 'Tap to hide ▲' : 'Tap to read more ▼'}
                             </Text>
@@ -289,14 +332,17 @@ export default function NewsScreen() {
     const ListHeader = () => (
         <View style={styles.headerContainer}>
             <View style={styles.headerBadgeRow}>
-                <Text style={styles.headerBadge}>ABS News</Text>
+                <Text style={styles.headerBadge}>ABS Newsroom</Text>
                 {items.length > 0 && (
                     <Text style={styles.headerCount}>{items.length} posts</Text>
                 )}
             </View>
+
             <Text style={styles.heading}>News & Updates</Text>
+            <View style={styles.headerAccentBar} />
             <Text style={styles.subheading}>
-                Stay updated with important announcements, mock tests and exam tips.
+                Stay updated with important announcements, mock tests and exam tips from
+                ABS.
             </Text>
 
             {(error || usingFallback) && (
@@ -320,15 +366,15 @@ export default function NewsScreen() {
         if (loadingMore) {
             return (
                 <View style={styles.footer}>
-                    <ActivityIndicator color="#E5E7EB" />
-                    <Text style={{ marginTop: 8, color: '#9CA3AF' }}>Loading more…</Text>
+                    <ActivityIndicator color={styles.footerSpinner.color as string} />
+                    <Text style={styles.footerLoadingText}>Loading more…</Text>
                 </View>
             );
         }
         if (endReached && items.length > 0) {
             return (
                 <View style={styles.footer}>
-                    <Text style={{ color: '#6B7280' }}>You’re all caught up.</Text>
+                    <Text style={styles.footerDoneText}>You’re all caught up.</Text>
                 </View>
             );
         }
@@ -343,210 +389,322 @@ export default function NewsScreen() {
         );
     };
 
-    if (loading && items.length === 0) {
-        return (
-            <View style={styles.fullCenter}>
-                <ActivityIndicator color="#E5E7EB" />
-                <Text style={{ marginTop: 8, color: '#9CA3AF' }}>Loading news…</Text>
-            </View>
-        );
-    }
-
+    // ✅ Root now uses SafeAreaView so content plays nicely with notches
     return (
-        <View style={styles.screen}>
-            {items.length === 0 ? (
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+            {loading && items.length === 0 ? (
                 <View style={styles.fullCenter}>
-                    {error ? (
-                        <Text
-                            style={{
-                                color: '#FCA5A5',
-                                textAlign: 'center',
-                                paddingHorizontal: 16,
-                            }}
-                        >
-                            {error}
-                        </Text>
-                    ) : (
-                        <Text style={{ color: '#9CA3AF' }}>
-                            No news yet. Check again soon.
-                        </Text>
-                    )}
+                    <ActivityIndicator color={styles.footerSpinner.color as string} />
+                    <Text style={styles.fullCenterText}>Loading news…</Text>
                 </View>
             ) : (
-                <FlatList
-                    data={items}
-                    keyExtractor={(it) => it.id}
-                    renderItem={renderItem}
-                    contentContainerStyle={{
-                        paddingHorizontal: 16,
-                        paddingBottom: 24,
-                        paddingTop: 12,
-                    }}
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
-                    onEndReachedThreshold={0.35}
-                    onEndReached={loadNextPage}
-                    ListHeaderComponent={ListHeader}
-                    ListFooterComponent={ListFooter}
-                    removeClippedSubviews={false}
-                />
+                <View style={styles.screen}>
+                    {items.length === 0 ? (
+                        <View style={styles.fullCenter}>
+                            {error ? (
+                                <Text style={styles.errorText}>{error}</Text>
+                            ) : (
+                                <Text style={styles.emptyMainText}>
+                                    No news yet. Check again soon.
+                                </Text>
+                            )}
+                        </View>
+                    ) : (
+                        <FlatList
+                            data={items}
+                            keyExtractor={it => it.id}
+                            renderItem={renderItem}
+                            contentContainerStyle={styles.listContent}
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            onEndReachedThreshold={0.35}
+                            onEndReached={loadNextPage}
+                            ListHeaderComponent={ListHeader}
+                            ListFooterComponent={ListFooter}
+                            removeClippedSubviews={false}
+                        />
+                    )}
+                </View>
             )}
-        </View>
+        </SafeAreaView>
     );
 }
 
-const styles = StyleSheet.create({
-    screen: { flex: 1, backgroundColor: '#020617' }, // dark like Home
-    fullCenter: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#020617',
-    },
+/** 🔹 Theme-aware + SafeArea-aware styles */
+const createStyles = (isDark: boolean) =>
+    StyleSheet.create({
+        safeArea: {
+            flex: 1,
+            backgroundColor: isDark ? '#020617' : '#F3F4F6',
+        },
+        screen: {
+            flex: 1,
+            backgroundColor: isDark ? '#020617' : '#F3F4F6',
+        },
+        fullCenter: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: isDark ? '#020617' : '#F3F4F6',
+        },
+        fullCenterText: {
+            marginTop: 8,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+        },
+        errorText: {
+            color: '#FCA5A5',
+            textAlign: 'center',
+            paddingHorizontal: 16,
+        },
+        emptyMainText: {
+            color: isDark ? '#9CA3AF' : '#6B7280',
+        },
 
-    headerContainer: {
-        marginBottom: 14,
-    },
-    headerBadgeRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 6,
-    },
-    headerBadge: {
-        fontSize: 11,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 999,
-        backgroundColor: '#111827',
-        color: ACCENT,
-        fontWeight: '600',
-    },
-    headerCount: {
-        fontSize: 11,
-        color: '#9CA3AF',
-    },
-    heading: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#F9FAFB',
-    },
-    subheading: {
-        fontSize: 13,
-        color: '#9CA3AF',
-        marginTop: 4,
-    },
+        headerContainer: {
+            marginBottom: 16,
+        },
+        headerBadgeRow: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 8,
+        },
+        headerBadge: {
+            fontSize: 11,
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 999,
+            backgroundColor: isDark ? '#111827' : '#E5E7EB',
+            color: ACCENT,
+            fontWeight: '600',
+        },
+        headerCount: {
+            fontSize: 11,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+        },
+        heading: {
+            fontSize: 22,
+            fontWeight: '800',
+            color: isDark ? '#F9FAFB' : '#111827',
+        },
+        headerAccentBar: {
+            marginTop: 6,
+            width: 64,
+            height: 3,
+            borderRadius: 999,
+            backgroundColor: ACCENT,
+        },
+        subheading: {
+            fontSize: 13,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            marginTop: 8,
+            lineHeight: 18,
+        },
 
-    card: {
-        backgroundColor: '#020617',
-        borderRadius: 16,
-        overflow: 'hidden',
-        marginBottom: 14,
-        borderWidth: 1,
-        borderColor: '#1F2937',
-    },
-    cardExpanded: {
-        borderColor: ACCENT,
-        backgroundColor: '#020617',
-    },
-    cover: { width: '100%', height: 170, backgroundColor: '#111827' },
-    cardBody: { padding: 12 },
-    cardMetaRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 6,
-    },
-    metaChip: {
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 999,
-        backgroundColor: '#111827',
-        color: '#E5E7EB',
-        fontSize: 11,
-    },
-    metaChipNew: {
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 999,
-        backgroundColor: '#064E3B',
-        color: '#6EE7B7',
-        fontSize: 11,
-        fontWeight: '600',
-    },
-    title: { fontSize: 16, fontWeight: '700', color: '#F9FAFB' },
-    subtitle: {
-        fontSize: 14,
-        color: '#E5E7EB',
-        marginTop: 4,
-    },
-    excerpt: {
-        fontSize: 13,
-        color: '#9CA3AF',
-        marginTop: 6,
-    },
+        card: {
+            backgroundColor: isDark ? '#020617' : '#FFFFFF',
+            borderRadius: 18,
+            overflow: 'hidden',
+            marginBottom: 16,
+            borderWidth: 1,
+            borderColor: isDark ? '#1F2937' : '#E5E7EB',
+            shadowColor: '#000',
+            shadowOpacity: 0.12,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 3,
+        },
+        cardExpanded: {
+            borderColor: ACCENT,
+            backgroundColor: isDark ? '#020617' : '#EEF2FF',
+        },
 
-    expandedBlock: {
-        marginTop: 10,
-        paddingTop: 8,
-        borderTopWidth: 1,
-        borderTopColor: '#1F2937',
-    },
-    expandedLabel: {
-        fontSize: 12,
-        color: '#9CA3AF',
-        marginBottom: 2,
-        fontWeight: '600',
-    },
-    expandedText: {
-        fontSize: 13,
-        color: '#E5E7EB',
-        lineHeight: 18,
-    },
+        coverWrapper: {
+            position: 'relative',
+            width: '100%',
+            height: 170,
+            backgroundColor: isDark ? '#1F2937' : '#E5E7EB',
+        },
+        cover: {
+            width: '100%',
+            height: '100%',
+        },
+        coverPlaceholder: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        coverPlaceholderText: {
+            fontSize: 16,
+            letterSpacing: 1,
+            fontWeight: '700',
+            color: isDark ? '#4B5563' : '#6B7280',
+        },
+        coverOverlay: {
+            position: 'absolute',
+            bottom: 10,
+            left: 12,
+            right: 12,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+        },
+        coverDateChip: {
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 999,
+            backgroundColor: 'rgba(15, 23, 42, 0.85)',
+            color: '#E5E7EB',
+            fontSize: 11,
+        },
+        coverNewChip: {
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 999,
+            backgroundColor: '#22C55E',
+            color: '#022C22',
+            fontSize: 11,
+            fontWeight: '700',
+        },
 
-    bottomRow: {
-        marginTop: 10,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    metaBottom: {
-        fontSize: 12,
-        color: '#6B7280',
-    },
-    readMore: {
-        fontSize: 12,
-        color: ACCENT,
-        fontWeight: '600',
-    },
+        cardBody: {
+            padding: 12,
+            paddingBottom: 14,
+        },
 
-    footer: {
-        paddingVertical: 18,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    moreBtn: {
-        paddingHorizontal: 18,
-        paddingVertical: 9,
-        borderRadius: 999,
-        borderWidth: 1,
-        borderColor: '#4B5563',
-        backgroundColor: '#020617',
-    },
-    moreBtnText: {
-        color: '#F9FAFB',
-        fontWeight: '600',
-        fontSize: 13,
-    },
+        // Author / meta row
+        authorRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 10,
+        },
+        avatarCircle: {
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: isDark ? '#111827' : '#EEF2FF',
+            marginRight: 8,
+        },
+        avatarText: {
+            fontSize: 15,
+            fontWeight: '700',
+            color: ACCENT,
+        },
+        authorTextBlock: {
+            flex: 1,
+        },
+        authorName: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: isDark ? '#E5E7EB' : '#111827',
+        },
+        authorDate: {
+            fontSize: 11,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            marginTop: 1,
+        },
 
-    banner: {
-        padding: 8,
-        borderRadius: 10,
-        marginTop: 10,
-    },
-    bannerError: { backgroundColor: '#7F1D1D' },
-    bannerWarn: { backgroundColor: '#78350F' },
-    bannerText: {
-        fontSize: 11,
-        color: '#F9FAFB',
-    },
-});
+        title: {
+            fontSize: 16,
+            fontWeight: '700',
+            color: isDark ? '#F9FAFB' : '#111827',
+            marginBottom: 4,
+        },
+        subtitle: {
+            fontSize: 13,
+            color: isDark ? '#E5E7EB' : '#4B5563',
+            marginBottom: 4,
+        },
+        excerpt: {
+            fontSize: 13,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            marginTop: 4,
+        },
+
+        expandedBlock: {
+            marginTop: 10,
+            paddingTop: 8,
+            borderTopWidth: 1,
+            borderTopColor: isDark ? '#1F2937' : '#E5E7EB',
+        },
+        expandedLabel: {
+            fontSize: 12,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            marginBottom: 2,
+            fontWeight: '600',
+        },
+        expandedText: {
+            fontSize: 13,
+            color: isDark ? '#E5E7EB' : '#374151',
+            lineHeight: 18,
+        },
+
+        bottomRow: {
+            marginTop: 10,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+        },
+        metaBottom: {
+            fontSize: 12,
+            color: isDark ? '#6B7280' : '#6B7280',
+        },
+        readMore: {
+            fontSize: 12,
+            color: ACCENT,
+            fontWeight: '600',
+        },
+
+        footer: {
+            paddingVertical: 18,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        footerSpinner: {
+            color: isDark ? '#E5E7EB' : '#9CA3AF',
+        } as any,
+        footerLoadingText: {
+            marginTop: 8,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+        },
+        footerDoneText: {
+            color: isDark ? '#9CA3AF' : '#6B7280',
+        },
+        moreBtn: {
+            paddingHorizontal: 18,
+            paddingVertical: 9,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: isDark ? '#4B5563' : '#D1D5DB',
+            backgroundColor: isDark ? '#020617' : '#FFFFFF',
+        },
+        moreBtnText: {
+            color: isDark ? '#F9FAFB' : '#111827',
+            fontWeight: '600',
+            fontSize: 13,
+        },
+
+        banner: {
+            padding: 8,
+            borderRadius: 10,
+            marginTop: 10,
+        },
+        bannerError: {
+            backgroundColor: '#7F1D1D',
+        },
+        bannerWarn: {
+            backgroundColor: '#78350F',
+        },
+        bannerText: {
+            fontSize: 11,
+            color: '#F9FAFB',
+        },
+
+        listContent: {
+            paddingHorizontal: 16,
+            paddingBottom: 24,
+            paddingTop: 12,
+        },
+    });

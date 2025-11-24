@@ -1,5 +1,5 @@
 // src/screens/MCQ/MCQQuizScreen.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,8 @@ import {
   Chapter,
   Question as DemoQuestion,
 } from '../../data/demo';
+
+import { useTheme } from '../../theme/ThemeContext';  // ✅ theme
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MCQQuiz'>;
 
@@ -43,6 +45,9 @@ export default function MCQQuizScreen({ route, navigation }: Props) {
     questions?: Question[];
     title?: string;
   };
+
+  const { isDark } = useTheme();                       // ✅ read global theme
+  const styles = useMemo(() => createStyles(isDark), [isDark]); // ✅ recompute when toggled
 
   const [chapter, setChapter] = useState<ChapterDoc | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -165,7 +170,7 @@ export default function MCQQuizScreen({ route, navigation }: Props) {
     return (
       <View style={styles.cCenter}>
         <ActivityIndicator />
-        <Text style={{ marginTop: 8 }}>Loading questions…</Text>
+        <Text style={styles.centerText}>Loading questions…</Text>
       </View>
     );
   }
@@ -173,7 +178,7 @@ export default function MCQQuizScreen({ route, navigation }: Props) {
   if (error) {
     return (
       <View style={styles.cCenter}>
-        <Text>{error}</Text>
+        <Text style={styles.errorText}>{error}</Text>
       </View>
     );
   }
@@ -181,7 +186,7 @@ export default function MCQQuizScreen({ route, navigation }: Props) {
   if (!questions.length) {
     return (
       <View style={styles.cCenter}>
-        <Text>No questions in this quiz.</Text>
+        <Text style={styles.centerText}>No questions in this quiz.</Text>
       </View>
     );
   }
@@ -297,99 +302,114 @@ export default function MCQQuizScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  c: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: '#F9FAFB',
-  },
-  cCenter: {
-    flex: 1,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  h: {
-    fontWeight: '700',
-    fontSize: 14,
-    color: '#4B5563',
-  },
-  quizTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginTop: 4,
-    marginBottom: 4,
-    color: '#111827',
-  },
-  chapterName: {
-    fontSize: 14,
-    marginTop: 4,
-    marginBottom: 4,
-    color: '#555',
-  },
-  q: {
-    fontSize: 16,
-    marginVertical: 12,
-    color: '#111827',
-  },
-  opt: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 8,
-    backgroundColor: '#FFFFFF',
-  },
-  optSelected: {
-    borderColor: '#6D28D9',
-    backgroundColor: '#EDE9FE',
-  },
-  optText: {
-    fontSize: 14,
-    color: '#111827',
-  },
-  optTextSelected: {
-    fontWeight: '600',
-  },
+// 🔧 Theme-aware styles
+const createStyles = (isDark: boolean) =>
+  StyleSheet.create({
+    c: {
+      flex: 1,
+      padding: 16,
+      backgroundColor: isDark ? '#0F172A' : '#F9FAFB',
+    },
+    cCenter: {
+      flex: 1,
+      padding: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? '#0F172A' : '#F9FAFB',
+    },
+    centerText: {
+      marginTop: 8,
+      fontSize: 13,
+      color: isDark ? '#E5E7EB' : '#4B5563',
+      textAlign: 'center',
+    },
+    errorText: {
+      marginTop: 8,
+      fontSize: 13,
+      color: '#F97373',
+      textAlign: 'center',
+    },
+    h: {
+      fontWeight: '700',
+      fontSize: 14,
+      color: isDark ? '#E5E7EB' : '#4B5563',
+    },
+    quizTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      marginTop: 4,
+      marginBottom: 4,
+      color: isDark ? '#F9FAFB' : '#111827',
+    },
+    chapterName: {
+      fontSize: 14,
+      marginTop: 4,
+      marginBottom: 4,
+      color: isDark ? '#9CA3AF' : '#555555',
+    },
+    q: {
+      fontSize: 16,
+      marginVertical: 12,
+      color: isDark ? '#F9FAFB' : '#111827',
+    },
+    opt: {
+      borderWidth: 1,
+      borderColor: isDark ? '#1F2937' : '#DDDDDD',
+      padding: 14,
+      borderRadius: 10,
+      marginBottom: 8,
+      backgroundColor: isDark ? '#020617' : '#FFFFFF',
+    },
+    optSelected: {
+      borderColor: '#6D28D9',
+      backgroundColor: isDark ? '#312E81' : '#EDE9FE',
+    },
+    optText: {
+      fontSize: 14,
+      color: isDark ? '#F9FAFB' : '#111827',
+    },
+    optTextSelected: {
+      fontWeight: '600',
+    },
 
-  bottomBar: {
-    marginTop: 'auto',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 12,
-  },
-  navBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: '#E5E7EB',
-  },
-  navBtnDisabled: {
-    backgroundColor: '#F3F4F6',
-  },
-  navBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  navBtnTextDisabled: {
-    color: '#9CA3AF',
-  },
-  progressText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#4B5563',
-  },
-  navBtnPrimary: {
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 999,
-    backgroundColor: '#6D28D9',
-  },
-  navBtnPrimaryText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-});
+    bottomBar: {
+      marginTop: 'auto',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingTop: 12,
+    },
+    navBtn: {
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+      borderRadius: 999,
+      backgroundColor: isDark ? '#1F2937' : '#E5E7EB',
+    },
+    navBtnDisabled: {
+      backgroundColor: isDark ? '#111827' : '#F3F4F6',
+    },
+    navBtnText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: isDark ? '#E5E7EB' : '#111827',
+    },
+    navBtnTextDisabled: {
+      color: isDark ? '#6B7280' : '#9CA3AF',
+    },
+    progressText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: isDark ? '#E5E7EB' : '#4B5563',
+    },
+    navBtnPrimary: {
+      paddingVertical: 10,
+      paddingHorizontal: 18,
+      borderRadius: 999,
+      backgroundColor: '#6D28D9',
+    },
+    navBtnPrimaryText: {
+      color: '#FFFFFF',
+      fontWeight: '600',
+      fontSize: 14,
+    },
+  });

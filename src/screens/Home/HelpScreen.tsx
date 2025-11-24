@@ -1,8 +1,5 @@
-// import React from 'react';
-// import { View, Text } from 'react-native';
-// export default function HelpScreen() { return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Text>Help</Text></View>; }
 // src/screens/Help/HelpScreen.tsx
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -12,7 +9,6 @@ import {
     StyleSheet,
     ScrollView,
     Alert,
-    SafeAreaView,
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
@@ -21,9 +17,10 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'; // ✅ use safe-area-context
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/rootnavigator'; // keep as in your project
+import { RootStackParamList } from '../../navigation/rootnavigator';
+import { useTheme } from '../../theme/ThemeContext';
 
 // --------- Admin contact shown in the UI ----------
 const PHONE = '+91XXXXXXXXXX';
@@ -44,6 +41,10 @@ export default function HelpScreen({ }: Props) {
     const insets = useSafeAreaInsets();
     const { width } = useWindowDimensions();
     const scale = Math.min(Math.max(width / 390, 0.9), 1.12);
+
+    const { isDark } = useTheme();
+    const styles = useMemo(() => createStyles(isDark), [isDark]);
+    const placeholderColor = isDark ? '#6B7280' : '#9CA3AF';
 
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -138,12 +139,18 @@ export default function HelpScreen({ }: Props) {
     const bottomPad = Math.max(insets.bottom, 10);
 
     return (
-        <SafeAreaView style={styles.wrap}>
-            <StatusBar barStyle="light-content" backgroundColor="#020617" />
+        <SafeAreaView
+            style={styles.safeArea}
+            edges={['top', 'left', 'right']} // ✅ top + sides handled here, bottom handled via bottomPad
+        >
+            <StatusBar
+                barStyle={isDark ? 'light-content' : 'dark-content'}
+                backgroundColor={isDark ? '#020617' : '#F9FAFB'}
+            />
 
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                style={{ flex: 1 }}
+                style={styles.wrap}
             >
                 <ScrollView
                     showsVerticalScrollIndicator={false}
@@ -215,11 +222,7 @@ export default function HelpScreen({ }: Props) {
                             onPress={openEmail}
                             activeOpacity={0.8}
                         >
-                            <Icon
-                                name="email-outline"
-                                size={22 * scale}
-                                color="#60A5FA"
-                            />
+                            <Icon name="email-outline" size={22 * scale} color="#60A5FA" />
                             <Text style={[styles.quickLabel, { fontSize: 12 * scale }]}>
                                 Email
                             </Text>
@@ -261,13 +264,13 @@ export default function HelpScreen({ }: Props) {
                             <Icon
                                 name="account"
                                 size={20 * scale}
-                                color="#9CA3AF"
+                                color={placeholderColor}
                                 style={styles.inputIcon}
                             />
                             <TextInput
                                 style={[styles.input, { fontSize: 16 * scale }]}
                                 placeholder="Your Name"
-                                placeholderTextColor="#6B7280"
+                                placeholderTextColor={placeholderColor}
                                 value={name}
                                 onChangeText={setName}
                             />
@@ -277,13 +280,13 @@ export default function HelpScreen({ }: Props) {
                             <Icon
                                 name="email"
                                 size={20 * scale}
-                                color="#9CA3AF"
+                                color={placeholderColor}
                                 style={styles.inputIcon}
                             />
                             <TextInput
                                 style={[styles.input, { fontSize: 16 * scale }]}
                                 placeholder="Your Email"
-                                placeholderTextColor="#6B7280"
+                                placeholderTextColor={placeholderColor}
                                 value={email}
                                 onChangeText={setEmail}
                                 keyboardType="email-address"
@@ -295,7 +298,7 @@ export default function HelpScreen({ }: Props) {
                             <Icon
                                 name="message-text-outline"
                                 size={20 * scale}
-                                color="#9CA3AF"
+                                color={placeholderColor}
                                 style={styles.inputIconTop}
                             />
                             <TextInput
@@ -305,7 +308,7 @@ export default function HelpScreen({ }: Props) {
                                     { fontSize: 16 * scale },
                                 ]}
                                 placeholder="How can we help you?"
-                                placeholderTextColor="#6B7280"
+                                placeholderTextColor={placeholderColor}
                                 value={message}
                                 onChangeText={setMessage}
                                 multiline
@@ -330,9 +333,7 @@ export default function HelpScreen({ }: Props) {
                                         color="#fff"
                                         style={{ marginRight: 8 }}
                                     />
-                                    <Text
-                                        style={[styles.submitText, { fontSize: 16 * scale }]}
-                                    >
+                                    <Text style={[styles.submitText, { fontSize: 16 * scale }]}>
                                         Send Message
                                     </Text>
                                 </>
@@ -343,7 +344,7 @@ export default function HelpScreen({ }: Props) {
                             <Icon
                                 name="clock-outline"
                                 size={18 * scale}
-                                color="#9CA3AF"
+                                color={placeholderColor}
                             />
                             <Text style={[styles.noteText, { fontSize: 13 * scale }]}>
                                 Typical response within 24 hours (Mon–Sat)
@@ -357,7 +358,7 @@ export default function HelpScreen({ }: Props) {
                             <Icon
                                 name="office-building-marker"
                                 size={20 * scale}
-                                color="#E5E7EB"
+                                color={isDark ? '#E5E7EB' : '#4B5563'}
                             />
                             <Text style={[styles.infoText, { fontSize: 14 * scale }]}>
                                 {ADDRESS_LINE}
@@ -367,7 +368,7 @@ export default function HelpScreen({ }: Props) {
                             <Icon
                                 name="calendar-clock"
                                 size={20 * scale}
-                                color="#E5E7EB"
+                                color={isDark ? '#E5E7EB' : '#4B5563'}
                             />
                             <Text style={[styles.infoText, { fontSize: 14 * scale }]}>
                                 Hours: 10:00 AM – 7:00 PM (Mon–Sat)
@@ -380,167 +381,172 @@ export default function HelpScreen({ }: Props) {
     );
 }
 
-const styles = StyleSheet.create({
-    wrap: {
-        flex: 1,
-        backgroundColor: '#020617', // dark like Home / News
-    },
+/** Theme-aware + SafeArea-aware styles */
+const createStyles = (isDark: boolean) =>
+    StyleSheet.create({
+        safeArea: {
+            flex: 1,
+            backgroundColor: isDark ? '#020617' : '#F9FAFB', // matches screen background
+        },
+        wrap: {
+            flex: 1,
+        },
 
-    screenHeader: {
-        marginBottom: 12,
-    },
-    screenTitle: {
-        fontWeight: '700',
-        color: '#F9FAFB',
-    },
-    screenSubtitle: {
-        color: '#9CA3AF',
-        marginTop: 2,
-    },
+        screenHeader: {
+            marginBottom: 12,
+        },
+        screenTitle: {
+            fontWeight: '700',
+            color: isDark ? '#F9FAFB' : '#111827',
+        },
+        screenSubtitle: {
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            marginTop: 2,
+        },
 
-    hero: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 16,
-        padding: 12,
-        borderRadius: 14,
-        backgroundColor: '#020617',
-        borderWidth: 1,
-        borderColor: '#1F2937',
-    },
-    heroIconWrap: {
-        width: 44,
-        height: 44,
-        borderRadius: 999,
-        backgroundColor: '#111827',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 10,
-    },
-    heroTitle: {
-        fontWeight: '700',
-        color: '#F9FAFB',
-        marginBottom: 2,
-    },
-    heroText: {
-        color: '#9CA3AF',
-    },
+        hero: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 16,
+            padding: 12,
+            borderRadius: 14,
+            backgroundColor: isDark ? '#020617' : '#EFF6FF',
+            borderWidth: 1,
+            borderColor: isDark ? '#1F2937' : '#BFDBFE',
+        },
+        heroIconWrap: {
+            width: 44,
+            height: 44,
+            borderRadius: 999,
+            backgroundColor: isDark ? '#111827' : '#DBEAFE',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: 10,
+        },
+        heroTitle: {
+            fontWeight: '700',
+            color: isDark ? '#F9FAFB' : '#111827',
+            marginBottom: 2,
+        },
+        heroText: {
+            color: isDark ? '#9CA3AF' : '#4B5563',
+        },
 
-    quickGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 10,
-        marginBottom: 16,
-    },
-    quickCard: {
-        flexBasis: '48%',
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        borderRadius: 12,
-        backgroundColor: '#020617',
-        borderWidth: 1,
-        borderColor: '#1F2937',
-    },
-    quickLabel: {
-        color: '#9CA3AF',
-        marginTop: 4,
-    },
-    quickValue: {
-        color: '#F9FAFB',
-        fontWeight: '600',
-        marginTop: 2,
-    },
+        quickGrid: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 10,
+            marginBottom: 16,
+        },
+        quickCard: {
+            flexBasis: '48%',
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+            borderRadius: 12,
+            backgroundColor: isDark ? '#020617' : '#FFFFFF',
+            borderWidth: 1,
+            borderColor: isDark ? '#1F2937' : '#E5E7EB',
+        },
+        quickLabel: {
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            marginTop: 4,
+        },
+        quickValue: {
+            color: isDark ? '#F9FAFB' : '#111827',
+            fontWeight: '600',
+            marginTop: 2,
+        },
 
-    dividerRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: 14,
-    },
-    divider: {
-        flex: 1,
-        height: 1,
-        backgroundColor: '#1F2937',
-    },
-    dividerText: {
-        marginHorizontal: 8,
-        color: '#9CA3AF',
-    },
+        dividerRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginVertical: 14,
+        },
+        divider: {
+            flex: 1,
+            height: 1,
+            backgroundColor: isDark ? '#1F2937' : '#E5E7EB',
+        },
+        dividerText: {
+            marginHorizontal: 8,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+        },
 
-    formCard: {
-        backgroundColor: '#020617',
-        borderRadius: 14,
-        padding: 12,
-        borderWidth: 1,
-        borderColor: '#1F2937',
-        marginBottom: 16,
-    },
-    inputRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: '#1F2937',
-        backgroundColor: '#020617',
-        paddingHorizontal: 10,
-        marginBottom: 10,
-    },
-    inputIcon: {
-        marginRight: 6,
-    },
-    inputIconTop: {
-        marginRight: 6,
-        marginTop: 8,
-    },
-    input: {
-        flex: 1,
-        paddingVertical: 10,
-        color: '#F9FAFB',
-    },
-    multilineWrap: {
-        alignItems: 'flex-start',
-    },
-    textarea: {
-        minHeight: 100,
-    },
-    submitBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: 6,
-        paddingVertical: 12,
-        borderRadius: 10,
-        backgroundColor: ACCENT,
-    },
-    submitText: {
-        color: '#FFFFFF',
-        fontWeight: '600',
-    },
-    noteRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 8,
-        gap: 6,
-    },
-    noteText: {
-        color: '#9CA3AF',
-    },
+        formCard: {
+            backgroundColor: isDark ? '#020617' : '#FFFFFF',
+            borderRadius: 14,
+            padding: 12,
+            borderWidth: 1,
+            borderColor: isDark ? '#1F2937' : '#E5E7EB',
+            marginBottom: 16,
+        },
+        inputRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: isDark ? '#1F2937' : '#D1D5DB',
+            backgroundColor: isDark ? '#020617' : '#F9FAFB',
+            paddingHorizontal: 10,
+            marginBottom: 10,
+        },
+        inputIcon: {
+            marginRight: 6,
+        },
+        inputIconTop: {
+            marginRight: 6,
+            marginTop: 8,
+        },
+        input: {
+            flex: 1,
+            paddingVertical: 10,
+            color: isDark ? '#F9FAFB' : '#111827',
+        },
+        multilineWrap: {
+            alignItems: 'flex-start',
+        },
+        textarea: {
+            minHeight: 100,
+        },
+        submitBtn: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginTop: 6,
+            paddingVertical: 12,
+            borderRadius: 10,
+            backgroundColor: ACCENT,
+        },
+        submitText: {
+            color: '#FFFFFF',
+            fontWeight: '600',
+        },
+        noteRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginTop: 8,
+            gap: 6,
+        },
+        noteText: {
+            color: isDark ? '#9CA3AF' : '#6B7280',
+        },
 
-    infoCard: {
-        backgroundColor: '#020617',
-        borderRadius: 14,
-        padding: 12,
-        borderWidth: 1,
-        borderColor: '#1F2937',
-        marginBottom: 16,
-    },
-    infoRow: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        marginBottom: 8,
-        gap: 8,
-    },
-    infoText: {
-        color: '#E5E7EB',
-        flex: 1,
-    },
-});
+        infoCard: {
+            backgroundColor: isDark ? '#020617' : '#FFFFFF',
+            borderRadius: 14,
+            padding: 12,
+            borderWidth: 1,
+            borderColor: isDark ? '#1F2937' : '#E5E7EB',
+            marginBottom: 16,
+        },
+        infoRow: {
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            marginBottom: 8,
+            gap: 8,
+        },
+        infoText: {
+            color: isDark ? '#E5E7EB' : '#374151',
+            flex: 1,
+        },
+    });

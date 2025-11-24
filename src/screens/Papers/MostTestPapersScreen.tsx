@@ -20,6 +20,8 @@ import {
   type MockFullExamPdf,
 } from '../../data/demo';
 
+import { useTheme } from '../../theme/ThemeContext'; // ✅ theme hook
+
 type Props = NativeStackScreenProps<RootStackParamList, 'MockTestPapers'>;
 
 type SubjectWithMockPapers = {
@@ -28,7 +30,10 @@ type SubjectWithMockPapers = {
   papers: MockPdfPaper[];
 };
 
-export default function MockTestPapersScreen({}: Props) {
+export default function MockTestPapersScreen({ }: Props) {
+  const { isDark } = useTheme();
+  const styles = useMemo(() => createStyles(isDark), [isDark]); // ✅ themed styles
+
   // 🟢 Full mock exam papers (all subjects combined) – sorted latest first
   const fullExamPapers: MockFullExamPdf[] = useMemo(
     () => [...MOCK_FULL_EXAM_PAPERS].sort((a, b) => b.year - a.year),
@@ -148,83 +153,85 @@ export default function MockTestPapersScreen({}: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  c: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: '#F9FAFB',
-  },
-  heading: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  subheading: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginBottom: 12,
-  },
-  sectionHeading: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  sectionSub: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 12,
-  },
-  emptyWrap: {
-    paddingVertical: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  subjectBlock: {
-    marginBottom: 16,
-  },
-  subjectName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 6,
-  },
-  paperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
-    marginBottom: 8,
-  },
-  paperTitle: {
-    fontSize: 14,
-    color: '#111827',
-  },
-  paperMeta: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  viewText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2563EB',
-    marginLeft: 10,
-  },
-});
+/** Theme-aware styles */
+const createStyles = (isDark: boolean) =>
+  StyleSheet.create({
+    c: {
+      flex: 1,
+      padding: 16,
+      backgroundColor: isDark ? '#020617' : '#F9FAFB',
+    },
+    heading: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: isDark ? '#F9FAFB' : '#111827',
+      marginBottom: 4,
+    },
+    subheading: {
+      fontSize: 13,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      marginBottom: 12,
+    },
+    sectionHeading: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: isDark ? '#E5E7EB' : '#111827',
+      marginTop: 8,
+      marginBottom: 4,
+    },
+    sectionSub: {
+      fontSize: 12,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      marginBottom: 8,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: isDark ? '#1F2937' : '#E5E7EB',
+      marginVertical: 12,
+    },
+    emptyWrap: {
+      paddingVertical: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    emptyText: {
+      fontSize: 14,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      textAlign: 'center',
+    },
+    subjectBlock: {
+      marginBottom: 16,
+    },
+    subjectName: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: isDark ? '#E5E7EB' : '#111827',
+      marginBottom: 6,
+    },
+    paperRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: isDark ? '#1F2937' : '#E5E7EB',
+      backgroundColor: isDark ? '#020617' : '#FFFFFF',
+      marginBottom: 8,
+    },
+    paperTitle: {
+      fontSize: 14,
+      color: isDark ? '#E5E7EB' : '#111827',
+    },
+    paperMeta: {
+      fontSize: 12,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      marginTop: 2,
+    },
+    viewText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: isDark ? '#38BDF8' : '#2563EB',
+      marginLeft: 10,
+    },
+  });

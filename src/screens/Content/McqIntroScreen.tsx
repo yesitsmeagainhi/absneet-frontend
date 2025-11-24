@@ -127,9 +127,8 @@
 //     gap: 12,
 //   },
 // };
-
-// src/screens/Content/McqIntroScreen.tsx
-import React, { useEffect, useState } from 'react';
+// src/screens/Content/McqIntroScreen.tsx 
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -149,10 +148,15 @@ import {
   Chapter,
 } from '../../data/demo';
 
+import { useTheme } from '../../theme/ThemeContext';   // ✅ theme
+
 export default function McqIntroScreen() {
   const route = useRoute<any>();
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { subjectId, unitId, chapterId } = route.params ?? {};
+
+  const { isDark } = useTheme();                                  // ✅ read theme
+  const styles = useMemo(() => createStyles(isDark), [isDark]);   // ✅ themed styles
 
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [loading, setLoading] = useState(true);
@@ -269,96 +273,99 @@ export default function McqIntroScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  // full screen – white / light background
-  screen: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-    padding: 16,
-    // justifyContent: 'center',
-  },
+/**
+ * Theme-aware styles – dark by default, flips when isDark=false
+ */
+const createStyles = (isDark: boolean) =>
+  StyleSheet.create({
+    // full screen
+    screen: {
+      flex: 1,
+      backgroundColor: isDark ? '#0F172A' : '#F9FAFB',
+      padding: 16,
+    },
 
-  // central card
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
+    // central card
+    card: {
+      backgroundColor: isDark ? '#020617' : '#FFFFFF',
+      borderRadius: 14,
+      paddingVertical: 18,
+      paddingHorizontal: 16,
+      borderWidth: 1,
+      borderColor: isDark ? '#1F2937' : '#E5E7EB',
+    },
 
-  badge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: '#EEF2FF',
-    color: '#4F46E5',
-    fontSize: 11,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
+    badge: {
+      alignSelf: 'flex-start',
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor: isDark ? '#1D243A' : '#EEF2FF',
+      color: '#4F46E5',
+      fontSize: 11,
+      fontWeight: '600',
+      marginBottom: 8,
+    },
 
-  title: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 6,
-  },
+    title: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: isDark ? '#F9FAFB' : '#111827',
+      marginBottom: 6,
+    },
 
-  metaText: {
-    fontSize: 13,
-    color: '#4B5563',
-    marginBottom: 4,
-  },
+    metaText: {
+      fontSize: 13,
+      color: isDark ? '#E5E7EB' : '#4B5563',
+      marginBottom: 4,
+    },
 
-  metaStrong: {
-    fontWeight: '700',
-    color: '#111827',
-  },
+    metaStrong: {
+      fontWeight: '700',
+      color: isDark ? '#F9FAFB' : '#111827',
+    },
 
-  subText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 16,
-  },
+    subText: {
+      fontSize: 12,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      marginBottom: 16,
+    },
 
-  // primary button
-  primaryBtn: {
-    marginTop: 4,
-    backgroundColor: '#4F46E5',
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  primaryBtnDisabled: {
-    backgroundColor: '#9CA3AF',
-  },
-  primaryBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
-  },
+    // primary button
+    primaryBtn: {
+      marginTop: 4,
+      backgroundColor: '#4F46E5',
+      borderRadius: 12,
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    primaryBtnDisabled: {
+      backgroundColor: '#9CA3AF',
+    },
+    primaryBtnText: {
+      color: '#FFFFFF',
+      fontWeight: '600',
+      fontSize: 14,
+    },
 
-  // loading / error shared
-  center: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  helperText: {
-    marginTop: 8,
-    fontSize: 13,
-    color: '#4B5563',
-    textAlign: 'center',
-  },
-  errorText: {
-    marginTop: 8,
-    fontSize: 13,
-    color: '#DC2626',
-    textAlign: 'center',
-  },
-});
+    // loading / error shared
+    center: {
+      flex: 1,
+      backgroundColor: isDark ? '#0F172A' : '#F9FAFB',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 16,
+    },
+    helperText: {
+      marginTop: 8,
+      fontSize: 13,
+      color: isDark ? '#E5E7EB' : '#4B5563',
+      textAlign: 'center',
+    },
+    errorText: {
+      marginTop: 8,
+      fontSize: 13,
+      color: '#F97373',
+      textAlign: 'center',
+    },
+  });

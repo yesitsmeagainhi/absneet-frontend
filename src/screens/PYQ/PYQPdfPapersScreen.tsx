@@ -16,9 +16,14 @@ import {
   type FullExamPdf,
 } from '../../data/demo';
 
+import { useTheme } from '../../theme/ThemeContext'; // ✅ theme hook
+
 type Props = NativeStackScreenProps<RootStackParamList, 'PYQPdfPapers'>;
 
 export default function PYQPdfPapersScreen({ }: Props) {
+  const { isDark } = useTheme();
+  const styles = useMemo(() => createStyles(isDark), [isDark]);  // ✅ themed styles
+
   // 🟢 Full NEET exam (all subjects combined) – sorted latest first
   const fullExamPapers: FullExamPdf[] = useMemo(
     () => [...PYQ_FULL_EXAM_PAPERS].sort((a, b) => b.year - a.year),
@@ -68,83 +73,83 @@ export default function PYQPdfPapersScreen({ }: Props) {
           )}
         </View>
 
-        {/* NOTE: No subject-wise section here on purpose
-           Because NEET previous-year papers must be in mixed-subject format,
-           we are not dividing PDFs by subject on this screen. */}
+        {/* NOTE: No subject-wise section here on purpose */}
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  c: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: '#F9FAFB',
-  },
-  heading: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  subheading: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginBottom: 12,
-  },
-  completeExamCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
-    padding: 12,
-  },
-  completeExamTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  completeExamDesc: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 10,
-  },
-  emptyWrap: {
-    paddingVertical: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  paperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#F9FAFF',
-    marginBottom: 8,
-  },
-  paperTitle: {
-    fontSize: 14,
-    color: '#111827',
-  },
-  paperMeta: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  viewText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2563EB',
-    marginLeft: 10,
-  },
-});
+/** Theme-aware styles */
+const createStyles = (isDark: boolean) =>
+  StyleSheet.create({
+    c: {
+      flex: 1,
+      padding: 16,
+      backgroundColor: isDark ? '#020617' : '#F9FAFB',
+    },
+    heading: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: isDark ? '#F9FAFB' : '#111827',
+      marginBottom: 4,
+    },
+    subheading: {
+      fontSize: 13,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      marginBottom: 12,
+    },
+    completeExamCard: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: isDark ? '#1F2937' : '#E5E7EB',
+      backgroundColor: isDark ? '#020617' : '#FFFFFF',
+      padding: 12,
+    },
+    completeExamTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: isDark ? '#E5E7EB' : '#111827',
+      marginBottom: 4,
+    },
+    completeExamDesc: {
+      fontSize: 12,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      marginBottom: 10,
+    },
+    emptyWrap: {
+      paddingVertical: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    emptyText: {
+      fontSize: 14,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      textAlign: 'center',
+    },
+    paperRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: isDark ? '#1F2937' : '#E5E7EB',
+      backgroundColor: isDark ? '#020617' : '#F9FAFF',
+      marginBottom: 8,
+    },
+    paperTitle: {
+      fontSize: 14,
+      color: isDark ? '#E5E7EB' : '#111827',
+    },
+    paperMeta: {
+      fontSize: 12,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      marginTop: 2,
+    },
+    viewText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: isDark ? '#38BDF8' : '#2563EB',
+      marginLeft: 10,
+    },
+  });

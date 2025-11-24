@@ -51,9 +51,8 @@
 //     gap: 12,
 //   },
 // });
-
 // src/screens/MCQ/ResultScreen.tsx
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -66,6 +65,7 @@ import { RootStackParamList } from '../../navigation/RootNavigator';
 
 // 🔹 Use the Question type from your static demo data
 import { Question } from '../../data/demo';
+import { useTheme } from '../../theme/ThemeContext'; // ✅ theme
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Result'>;
 
@@ -80,6 +80,9 @@ type ResultParams = {
 export default function ResultScreen({ route, navigation }: Props) {
   const { correct, total, questions, answers, title } =
     route.params as ResultParams;
+
+  const { isDark } = useTheme();                          // ✅ read global theme
+  const styles = useMemo(() => createStyles(isDark), [isDark]); // ✅ recompute on toggle
 
   // 🔹 Derived stats
   const attempted = answers.filter((a) => a >= 0).length;
@@ -115,13 +118,13 @@ export default function ResultScreen({ route, navigation }: Props) {
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>Correct</Text>
-            <Text style={[styles.statValue, { color: '#16A34A' }]}>
+            <Text style={[styles.statValue, styles.statValueCorrect]}>
               {correct}
             </Text>
           </View>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>Incorrect</Text>
-            <Text style={[styles.statValue, { color: '#DC2626' }]}>
+            <Text style={[styles.statValue, styles.statValueIncorrect]}>
               {incorrect}
             </Text>
           </View>
@@ -167,14 +170,21 @@ export default function ResultScreen({ route, navigation }: Props) {
                     {userLabel} {gotRight ? '(Correct)' : '(Wrong)'}
                   </Text>
                 ) : (
-                  <Text style={{ color: '#6B7280' }}>{userLabel}</Text>
+                  <Text style={{ color: isDark ? '#9CA3AF' : '#6B7280' }}>
+                    {userLabel}
+                  </Text>
                 )}
               </Text>
 
               {/* Correct answer */}
               <Text style={styles.answerLine}>
                 Correct answer:{' '}
-                <Text style={{ fontWeight: '600', color: '#111827' }}>
+                <Text
+                  style={{
+                    fontWeight: '600',
+                    color: isDark ? '#F9FAFB' : '#111827',
+                  }}
+                >
                   {correctLabel}
                 </Text>
               </Text>
@@ -204,109 +214,117 @@ export default function ResultScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  c: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: '#F9FAFB',
-  },
+// 🔧 Theme-aware styles
+const createStyles = (isDark: boolean) =>
+  StyleSheet.create({
+    c: {
+      flex: 1,
+      padding: 16,
+      backgroundColor: isDark ? '#0F172A' : '#F9FAFB',
+    },
 
-  summaryCard: {
-    backgroundColor: '#EEF2FF',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-    marginBottom: 12,
-  },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1D4ED8',
-    marginBottom: 4,
-  },
-  summaryScore: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  summarySub: {
-    fontSize: 13,
-    color: '#4B5563',
-    marginTop: 2,
-  },
+    summaryCard: {
+      backgroundColor: isDark ? '#111827' : '#EEF2FF',
+      borderRadius: 12,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: isDark ? '#1D4ED8' : '#C7D2FE',
+      marginBottom: 12,
+    },
+    summaryTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: isDark ? '#BFDBFE' : '#1D4ED8',
+      marginBottom: 4,
+    },
+    summaryScore: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: isDark ? '#F9FAFB' : '#111827',
+    },
+    summarySub: {
+      fontSize: 13,
+      color: isDark ? '#E5E7EB' : '#4B5563',
+      marginTop: 2,
+    },
 
-  statsRow: {
-    flexDirection: 'row',
-    marginTop: 8,
-    gap: 8,
-  },
-  statBox: {
-    flex: 1,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: '#E0E7FF',
-  },
-  statLabel: {
-    fontSize: 11,
-    color: '#4B5563',
-  },
-  statValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#111827',
-    marginTop: 2,
-  },
+    statsRow: {
+      flexDirection: 'row',
+      marginTop: 8,
+      gap: 8,
+    },
+    statBox: {
+      flex: 1,
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+      borderRadius: 10,
+      backgroundColor: isDark ? '#1F2937' : '#E0E7FF',
+    },
+    statLabel: {
+      fontSize: 11,
+      color: isDark ? '#E5E7EB' : '#4B5563',
+    },
+    statValue: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: isDark ? '#F9FAFB' : '#111827',
+      marginTop: 2,
+    },
+    statValueCorrect: {
+      color: '#16A34A',
+    },
+    statValueIncorrect: {
+      color: '#DC2626',
+    },
 
-  qCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  qIndex: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  qText: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: '#111827',
-  },
-  answerLine: {
-    fontSize: 13,
-    color: '#374151',
-    marginTop: 2,
-  },
-  explLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#111827',
-    marginTop: 6,
-  },
-  explText: {
-    fontSize: 13,
-    color: '#4B5563',
-    marginTop: 2,
-  },
+    qCard: {
+      backgroundColor: isDark ? '#020617' : '#FFFFFF',
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: isDark ? '#1F2937' : '#E5E7EB',
+    },
+    qIndex: {
+      fontSize: 12,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      marginBottom: 4,
+    },
+    qText: {
+      fontSize: 15,
+      fontWeight: '600',
+      marginBottom: 8,
+      color: isDark ? '#F9FAFB' : '#111827',
+    },
+    answerLine: {
+      fontSize: 13,
+      color: isDark ? '#E5E7EB' : '#374151',
+      marginTop: 2,
+    },
+    explLabel: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: isDark ? '#F9FAFB' : '#111827',
+      marginTop: 6,
+    },
+    explText: {
+      fontSize: 13,
+      color: isDark ? '#E5E7EB' : '#4B5563',
+      marginTop: 2,
+    },
 
-  bottomBar: {
-    marginTop: 4,
-  },
-  primaryBtn: {
-    backgroundColor: '#6D28D9',
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  primaryBtnText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-});
+    bottomBar: {
+      marginTop: 4,
+    },
+    primaryBtn: {
+      backgroundColor: '#6D28D9',
+      paddingVertical: 12,
+      borderRadius: 12,
+      alignItems: 'center',
+    },
+    primaryBtnText: {
+      color: '#FFFFFF',
+      fontWeight: '600',
+      fontSize: 14,
+    },
+  });

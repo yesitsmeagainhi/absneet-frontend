@@ -16,6 +16,8 @@ import {
     type PYQPaper,
 } from '../../data/demo';
 
+import { useTheme } from '../../theme/ThemeContext'; // ✅ global theme
+
 type Props = NativeStackScreenProps<RootStackParamList, 'PYQSubjects'>;
 
 type YearGroup = {
@@ -25,6 +27,9 @@ type YearGroup = {
 };
 
 export default function PYQSubjectsScreen({ navigation }: Props) {
+    const { isDark } = useTheme();
+    const styles = useMemo(() => createStyles(isDark), [isDark]);
+
     // 📌 Group all PYQ papers BY YEAR and combine across subjects
     const yearGroups: YearGroup[] = useMemo(() => {
         const byYear: Record<number, YearGroup> = {};
@@ -64,7 +69,7 @@ export default function PYQSubjectsScreen({ navigation }: Props) {
     };
 
     return (
-        <View style={{ flex: 1, padding: 16, backgroundColor: '#F9FAFB' }}>
+        <View style={styles.screen}>
             <Text style={styles.heading}>Previous Year NEET MCQ – Full Exam</Text>
             <Text style={styles.subheading}>
                 Each paper below contains mixed questions from all subjects
@@ -107,49 +112,58 @@ export default function PYQSubjectsScreen({ navigation }: Props) {
     );
 }
 
-const styles = StyleSheet.create({
-    heading: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#111827',
-        marginBottom: 4,
-    },
-    subheading: {
-        fontSize: 13,
-        color: '#6B7280',
-        marginBottom: 12,
-    },
-    row: {
-        padding: 16,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        borderRadius: 10,
-        marginBottom: 10,
-        backgroundColor: '#FFFFFF',
-    },
-    yearText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#111827',
-    },
-    subtitle: {
-        fontSize: 12,
-        color: '#6B7280',
-        marginTop: 4,
-    },
-    metaText: {
-        fontSize: 12,
-        color: '#4B5563',
-        marginTop: 4,
-    },
-    emptyWrap: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    emptyText: {
-        fontSize: 14,
-        color: '#6B7280',
-        textAlign: 'center',
-    },
-});
+/**
+ * Theme-aware styles – dark by default, flip when isDark=false
+ */
+const createStyles = (isDark: boolean) =>
+    StyleSheet.create({
+        screen: {
+            flex: 1,
+            padding: 16,
+            backgroundColor: isDark ? '#020617' : '#F9FAFB',
+        },
+        heading: {
+            fontSize: 18,
+            fontWeight: '700',
+            color: isDark ? '#F9FAFB' : '#111827',
+            marginBottom: 4,
+        },
+        subheading: {
+            fontSize: 13,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            marginBottom: 12,
+        },
+        row: {
+            padding: 16,
+            borderWidth: 1,
+            borderColor: isDark ? '#1F2937' : '#E5E7EB',
+            borderRadius: 10,
+            marginBottom: 10,
+            backgroundColor: isDark ? '#020617' : '#FFFFFF',
+        },
+        yearText: {
+            fontSize: 16,
+            fontWeight: '600',
+            color: isDark ? '#F9FAFB' : '#111827',
+        },
+        subtitle: {
+            fontSize: 12,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            marginTop: 4,
+        },
+        metaText: {
+            fontSize: 12,
+            color: isDark ? '#E5E7EB' : '#4B5563',
+            marginTop: 4,
+        },
+        emptyWrap: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        emptyText: {
+            fontSize: 14,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            textAlign: 'center',
+        },
+    });

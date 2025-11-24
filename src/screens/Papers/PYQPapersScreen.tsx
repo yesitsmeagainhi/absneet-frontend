@@ -1,3 +1,4 @@
+// src/screens/PYQ/PYQPapersScreen.tsx
 import React, { useMemo } from 'react';
 import {
     View,
@@ -9,11 +10,15 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 import { PYQ_PAPERS } from '../../data/demo';
+import { useTheme } from '../../theme/ThemeContext'; // ✅ theme
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PYQPapers'>;
 
 export default function PYQPapersScreen({ route, navigation }: Props) {
     const { subjectId, subjectName } = route.params;
+
+    const { isDark } = useTheme();                       // ✅ read theme
+    const styles = useMemo(() => createStyles(isDark), [isDark]); // ✅ themed styles
 
     // 🔹 Get all PYQ MCQ papers for this subject, latest year first
     const papers = useMemo(
@@ -53,7 +58,9 @@ export default function PYQPapersScreen({ route, navigation }: Props) {
                                 <View style={styles.topRow}>
                                     <View>
                                         <Text style={styles.yearText}>{item.year}</Text>
-                                        <Text style={styles.examText}>{item.exam} · MCQ Paper</Text>
+                                        <Text style={styles.examText}>
+                                            {item.exam} · MCQ Paper
+                                        </Text>
                                     </View>
                                     <View style={styles.badge}>
                                         <Text style={styles.badgeText}>
@@ -72,7 +79,7 @@ export default function PYQPapersScreen({ route, navigation }: Props) {
                                         onPress={() =>
                                             navigation.navigate('MCQQuiz', {
                                                 subjectId,
-                                                title: item.title,      // shows on quiz screen
+                                                title: item.title,      // shows on quiz & result
                                                 questions: item.questions,
                                             })
                                         }
@@ -89,87 +96,89 @@ export default function PYQPapersScreen({ route, navigation }: Props) {
     );
 }
 
-const styles = StyleSheet.create({
-    c: {
-        flex: 1,
-        padding: 16,
-        backgroundColor: '#F9FAFB',
-    },
-    heading: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#111827',
-        marginBottom: 4,
-    },
-    subheading: {
-        fontSize: 13,
-        color: '#6B7280',
-        marginBottom: 12,
-    },
-    emptyWrap: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    emptyText: {
-        fontSize: 14,
-        color: '#6B7280',
-        textAlign: 'center',
-    },
-    paperCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        padding: 14,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        marginBottom: 12,
-    },
-    topRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 6,
-    },
-    yearText: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#111827',
-    },
-    examText: {
-        fontSize: 12,
-        color: '#6B7280',
-        marginTop: 2,
-    },
-    badge: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 999,
-        backgroundColor: '#EEF2FF',
-    },
-    badgeText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#4F46E5',
-    },
-    paperTitle: {
-        fontSize: 14,
-        color: '#111827',
-        marginTop: 6,
-        marginBottom: 10,
-    },
-    footerRow: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-    },
-    solveBtn: {
-        backgroundColor: '#6D28D9',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 999,
-    },
-    solveBtnText: {
-        color: '#FFFFFF',
-        fontSize: 13,
-        fontWeight: '600',
-    },
-});
+/** Theme-aware styles */
+const createStyles = (isDark: boolean) =>
+    StyleSheet.create({
+        c: {
+            flex: 1,
+            padding: 16,
+            backgroundColor: isDark ? '#020617' : '#F9FAFB',
+        },
+        heading: {
+            fontSize: 18,
+            fontWeight: '700',
+            color: isDark ? '#F9FAFB' : '#111827',
+            marginBottom: 4,
+        },
+        subheading: {
+            fontSize: 13,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            marginBottom: 12,
+        },
+        emptyWrap: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        emptyText: {
+            fontSize: 14,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            textAlign: 'center',
+        },
+        paperCard: {
+            backgroundColor: isDark ? '#020617' : '#FFFFFF',
+            borderRadius: 12,
+            padding: 14,
+            borderWidth: 1,
+            borderColor: isDark ? '#1F2937' : '#E5E7EB',
+            marginBottom: 12,
+        },
+        topRow: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 6,
+        },
+        yearText: {
+            fontSize: 16,
+            fontWeight: '700',
+            color: isDark ? '#F9FAFB' : '#111827',
+        },
+        examText: {
+            fontSize: 12,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            marginTop: 2,
+        },
+        badge: {
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 999,
+            backgroundColor: isDark ? '#1E293B' : '#EEF2FF',
+        },
+        badgeText: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: isDark ? '#C4B5FD' : '#4F46E5',
+        },
+        paperTitle: {
+            fontSize: 14,
+            color: isDark ? '#E5E7EB' : '#111827',
+            marginTop: 6,
+            marginBottom: 10,
+        },
+        footerRow: {
+            flexDirection: 'row',
+            justifyContent: 'flex-end',
+        },
+        solveBtn: {
+            backgroundColor: '#6D28D9',
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            borderRadius: 999,
+        },
+        solveBtnText: {
+            color: '#FFFFFF',
+            fontSize: 13,
+            fontWeight: '600',
+        },
+    });

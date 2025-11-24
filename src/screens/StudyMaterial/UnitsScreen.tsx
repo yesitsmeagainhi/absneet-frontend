@@ -170,8 +170,8 @@
 // });
 
 
-// src/screens/MCQ/UnitsScreen.tsx 
-import React, { useEffect, useState } from 'react';
+// src/screens/MCQ/UnitsScreen.tsx  
+import React, { useEffect, useState, useMemo } from 'react';
 import {
     View,
     Text,
@@ -185,11 +185,15 @@ import { RootStackParamList } from '../../navigation/RootNavigator';
 
 // 🔹 Static data instead of Firestore
 import { SUBJECTS, Unit as DemoUnit, Subject } from '../../data/demo';
+import { useTheme } from '../../theme/ThemeContext'; // ✅ use global theme
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Units'>;
 
 export default function UnitsScreen({ route, navigation }: Props) {
     const { subjectId } = route.params;
+
+    const { isDark } = useTheme();                    // ✅ read theme
+    const styles = useMemo(() => createStyles(isDark), [isDark]); // ✅ themed styles
 
     const [units, setUnits] = useState<DemoUnit[]>([]);
     const [loading, setLoading] = useState(true);
@@ -253,7 +257,6 @@ export default function UnitsScreen({ route, navigation }: Props) {
                 <Text style={styles.centerText}>
                     No units found for this subject in demo data.
                 </Text>
-                {/* You can also show the Home button here if you want – optional */}
             </View>
         );
     }
@@ -288,78 +291,79 @@ export default function UnitsScreen({ route, navigation }: Props) {
     );
 }
 
-const styles = StyleSheet.create({
-    // 🔹 main screen wrapper – light background
-    c: {
-        flex: 1,
-        padding: 16,
-        backgroundColor: '#F9FAFB',
-    },
+/**
+ * Themed styles – dark by default, flip when isDark = false
+ */
+const createStyles = (isDark: boolean) =>
+    StyleSheet.create({
+        // main screen wrapper
+        c: {
+            flex: 1,
+            padding: 16,
+            backgroundColor: isDark ? '#0F172A' : '#F9FAFB',
+        },
 
-    // unit card
-    row: {
-        paddingVertical: 14,
-        paddingHorizontal: 12,
-        borderRadius: 12,
-        marginBottom: 10,
-        backgroundColor: '#FFFFFF',
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-    },
-    unitIndex: {
-        fontSize: 12,
-        color: '#6B7280',
-        marginBottom: 2,
-        fontWeight: '500',
-    },
-    unitName: {
-        fontSize: 15,
-        color: '#111827',
-        fontWeight: '600',
-    },
+        // unit card
+        row: {
+            paddingVertical: 14,
+            paddingHorizontal: 12,
+            borderRadius: 12,
+            marginBottom: 10,
+            backgroundColor: isDark ? '#020617' : '#FFFFFF',
+            borderWidth: 1,
+            borderColor: isDark ? '#1F2937' : '#E5E7EB',
+        },
+        unitIndex: {
+            fontSize: 12,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            marginBottom: 2,
+            fontWeight: '500',
+        },
+        unitName: {
+            fontSize: 15,
+            color: isDark ? '#F9FAFB' : '#111827',
+            fontWeight: '600',
+        },
 
-    // loading / error / empty
-    center: {
-        flex: 1,
-        padding: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#F9FAFB',
-    },
-    centerText: {
-        marginTop: 8,
-        fontSize: 13,
-        color: '#4B5563',
-        textAlign: 'center',
-    },
-    errorText: {
-        marginTop: 8,
-        fontSize: 13,
-        color: '#DC2626',
-        textAlign: 'center',
-    },
+        // loading / error / empty
+        center: {
+            flex: 1,
+            padding: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: isDark ? '#0F172A' : '#F9FAFB',
+        },
+        centerText: {
+            marginTop: 8,
+            fontSize: 13,
+            color: isDark ? '#E5E7EB' : '#4B5563',
+            textAlign: 'center',
+        },
+        errorText: {
+            marginTop: 8,
+            fontSize: 13,
+            color: '#F97373', // little brighter red in both themes
+            textAlign: 'center',
+        },
 
-    // 🔹 Floating Home button
-    fab: {
-        position: 'absolute',
-        bottom: 24,
-        right: 24,
-        backgroundColor: '#4F46E5',
-        paddingVertical: 10,
-        paddingHorizontal: 18,
-        borderRadius: 999,
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.5,
-    },
-    fabText: {
-        color: '#F9FAFB',
-        fontWeight: '700',
-        fontSize: 13,
-    },
-});
-
-
-// export default UnitsScreen;
+        // Floating Home button
+        fab: {
+            position: 'absolute',
+            bottom: 24,
+            right: 24,
+            backgroundColor: '#4F46E5',
+            paddingVertical: 10,
+            paddingHorizontal: 18,
+            borderRadius: 999,
+            elevation: 4,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 3.5,
+        },
+        fabText: {
+            color: '#F9FAFB',
+            fontWeight: '700',
+            fontSize: 13,
+        },
+    });

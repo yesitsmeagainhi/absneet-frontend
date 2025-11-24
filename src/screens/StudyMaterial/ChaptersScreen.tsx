@@ -167,9 +167,8 @@
 //     },
 // });
 
-
-// src/screens/subject/ChaptersScreen.tsx 
-import React, { useEffect, useState } from 'react';
+// src/screens/subject/ChaptersScreen.tsx
+import React, { useEffect, useState, useMemo } from 'react';
 import {
     View,
     Text,
@@ -183,11 +182,15 @@ import { RootStackParamList } from '../../navigation/RootNavigator';
 
 // 🔹 Static data instead of Firestore
 import { SUBJECTS, Subject, Unit, Chapter as DemoChapter } from '../../data/demo';
+import { useTheme } from '../../theme/ThemeContext';  // ✅ global theme
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Chapters'>;
 
 export default function ChaptersScreen({ route, navigation }: Props) {
     const { subjectId, unitId } = route.params;
+
+    const { isDark } = useTheme();                                 // ✅ read theme
+    const styles = useMemo(() => createStyles(isDark), [isDark]);  // ✅ themed styles
 
     const [chapters, setChapters] = useState<DemoChapter[]>([]);
     const [loading, setLoading] = useState(true);
@@ -297,75 +300,79 @@ export default function ChaptersScreen({ route, navigation }: Props) {
     );
 }
 
-const styles = StyleSheet.create({
-    // 🔹 main screen wrapper – light background
-    c: {
-        flex: 1,
-        padding: 16,
-        backgroundColor: '#F9FAFB', // light theme
-    },
+/**
+ * Themed styles – dark by default, switches when isDark = false
+ */
+const createStyles = (isDark: boolean) =>
+    StyleSheet.create({
+        // main screen wrapper
+        c: {
+            flex: 1,
+            padding: 16,
+            backgroundColor: isDark ? '#0F172A' : '#F9FAFB',
+        },
 
-    // chapter card
-    row: {
-        paddingVertical: 14,
-        paddingHorizontal: 12,
-        borderRadius: 12,
-        marginBottom: 10,
-        backgroundColor: '#FFFFFF',
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-    },
-    chapterIndex: {
-        fontSize: 12,
-        color: '#6B7280',
-        marginBottom: 2,
-        fontWeight: '500',
-    },
-    chapterName: {
-        fontSize: 15,
-        color: '#111827',
-        fontWeight: '600',
-    },
+        // chapter card
+        row: {
+            paddingVertical: 14,
+            paddingHorizontal: 12,
+            borderRadius: 12,
+            marginBottom: 10,
+            backgroundColor: isDark ? '#020617' : '#FFFFFF',
+            borderWidth: 1,
+            borderColor: isDark ? '#1F2937' : '#E5E7EB',
+        },
+        chapterIndex: {
+            fontSize: 12,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            marginBottom: 2,
+            fontWeight: '500',
+        },
+        chapterName: {
+            fontSize: 15,
+            color: isDark ? '#F9FAFB' : '#111827',
+            fontWeight: '600',
+        },
 
-    // loading / error / empty states
-    center: {
-        flex: 1,
-        padding: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#F9FAFB',
-    },
-    centerText: {
-        marginTop: 8,
-        fontSize: 13,
-        color: '#4B5563',
-        textAlign: 'center',
-    },
-    errorText: {
-        marginTop: 8,
-        fontSize: 13,
-        color: '#DC2626',
-        textAlign: 'center',
-    },
+        // loading / error / empty states
+        center: {
+            flex: 1,
+            padding: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: isDark ? '#0F172A' : '#F9FAFB',
+        },
+        centerText: {
+            marginTop: 8,
+            fontSize: 13,
+            color: isDark ? '#E5E7EB' : '#4B5563',
+            textAlign: 'center',
+        },
+        errorText: {
+            marginTop: 8,
+            fontSize: 13,
+            color: '#F97373', // bright red both themes
+            textAlign: 'center',
+        },
 
-    // 🔹 Floating Home button
-    fab: {
-        position: 'absolute',
-        bottom: 24,
-        right: 24,
-        backgroundColor: '#4F46E5',
-        paddingVertical: 10,
-        paddingHorizontal: 18,
-        borderRadius: 999,
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.5,
-    },
-    fabText: {
-        color: '#F9FAFB',
-        fontWeight: '700',
-        fontSize: 13,
-    },
-});
+        // Floating Home button
+        fab: {
+            position: 'absolute',
+            bottom: 24,
+            right: 24,
+            backgroundColor: '#4F46E5',
+            paddingVertical: 10,
+            paddingHorizontal: 18,
+            borderRadius: 999,
+            elevation: 4,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 3.5,
+        },
+        fabText: {
+            color: '#F9FAFB',
+            fontWeight: '700',
+            fontSize: 13,
+        },
+    });
