@@ -502,7 +502,6 @@
 //     },
 //   });
 
-
 // src/screens/Home/HomeScreen.tsx
 import React, {
   useMemo,
@@ -528,7 +527,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootStackParamList } from '../../navigation/rootnavigator';
 import { useTheme } from '../../theme/ThemeContext';
 import { SUBJECTS, Subject } from '../../data/demo';
+// import ArrowWaveUp from '../../assets/intro/arrow_wave_up.png';
 
+// ✅ correct
+const ArrowWaveUp = require('../../assets/intro/arrow_wave_up.png');
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 type HomeBanner = {
@@ -538,7 +540,7 @@ type HomeBanner = {
 };
 
 // 🔑 bumped version so new build shows tips once
-const HOME_INTRO_KEY = 'absneet_home_intro_seen_v4';
+const HOME_INTRO_KEY = 'absneet_home_intro_seen_v5';
 
 const HOME_BANNERS: HomeBanner[] = [
   {
@@ -554,6 +556,8 @@ const HOME_BANNERS: HomeBanner[] = [
     link: 'https://absedu.in/blog/neet-tips',
   },
 ];
+const TIP_CARD_HEIGHT = 150;      // already using this
+const WAVE_ARROW_HEIGHT = 80;     // approximate arrow image height
 
 // All tips in sequence
 const INTRO_STEPS = [
@@ -607,8 +611,23 @@ export default function HomeScreen() {
 
   const styles = useMemo(() => createStyles(isDark), [isDark]);
 
+  // 🔹 anchors for dynamic positioning
+  // const [anchors, setAnchors] = useState({
+  //   topAreaY: 0,     // bottom of top bar + banners
+  //   subjectsY: 0,    // bottom of subjects section
+  //   practiceY: 0,    // bottom of practice section
+  // });
+  const [anchors, setAnchors] = useState({
+    topAreaY: 0,      // bottom of top bar + banners
+    subjectsY: 0,     // bottom of subjects section
+    practiceY: 0,     // bottom of practice section (optional, still useful)
+    customMcqY: 0,    // center of Custom MCQ card
+    pyqMcqY: 0,       // center of Previous Year MCQ card
+    pyqPdfY: 0,       // center of PYQ PDF card
+    mockY: 0,         // center of Mock Test card
+  });
+
   // 🔹 multi-step intro overlay
-  // ✅ start as TRUE so we definitely see it on first render
   const [showIntro, setShowIntro] = useState(true);
   const [introStep, setIntroStep] = useState(0); // index in INTRO_STEPS
 
@@ -616,13 +635,23 @@ export default function HomeScreen() {
     const loadIntroFlag = async () => {
       try {
         const flag = await AsyncStorage.getItem(HOME_INTRO_KEY);
-        // if we ALREADY have a flag, hide tips
-        if (flag) {
-          setShowIntro(false);
-        }
+
+        console.log('[HOME_INTRO] flag =', flag);
+        // For now: always show tips from step 0
+        setIntroStep(0);
+        setShowIntro(true);
+
+        // If later you want "show only once", restore this:
+        // if (flag === '1') {
+        //   setShowIntro(false);
+        // } else {
+        //   setIntroStep(0);
+        //   setShowIntro(true);
+        // }
       } catch (e) {
         console.warn('Failed to read home intro flag:', e);
-        // if anything fails, keep showIntro = true (safe default)
+        setIntroStep(0);
+        setShowIntro(true);
       }
     };
     loadIntroFlag();
@@ -664,69 +693,103 @@ export default function HomeScreen() {
 
   const currentStep = INTRO_STEPS[introStep];
 
-  // 🔹 Position + arrow config for each step
+  // 🔹 Position + arrow config for each step (dynamic using anchors)
   const introPos = useMemo(() => {
     if (!currentStep) return undefined;
+    const TIP_CARD_HEIGHT = 150; // approximate height of the tip card
+
     const id = currentStep.id as IntroStepId;
 
     switch (id) {
       case 'subjects':
-        // Card at bottom, arrow pointing up to the subjects row in middle
+        if (!anchors.subjectsY) return undefined;
         return {
-          wrapper: { left: 16, right: 16, bottom: 80 },
-          arrowOnTop: true,
+          // tip card just BELOW the subjects section
+          wrapper: { left: 16, right: 16, top: anchors.subjectsY + 8 },
+          arrowOnTop: true,  // arrow points UP to the subjects row
           arrowOnBottom: false,
           arrowAlign: 'center' as const,
         };
+
       case 'custom_mcq':
-        // Card at bottom, arrow up towards left practice card
-        return {
-          wrapper: { left: 16, right: 16, bottom: 40 },
-          arrowOnTop: true,
-          arrowOnBottom: false,
-          arrowAlign: 'flex-start' as const,
-        };
+        const targetY = anchors.practiceY;
+        if (!anchors.practiceY || !anchors.subjectsY) return undefined;
+        {
+          // place card ABOVE the practice grid, arrow DOWN to left side
+          // const desiredTop = anchors.practiceY - TIP_CARD_HEIGHT - 56;
+          const desiredTop = targetY - (TIP_CARD_HEIGHT + WAVE_ARROW_HEIGHT + 16);
+
+          const minTop = anchors.subjectsY - 50; // don't go too close to subjects
+          const safeTop = Math.max(desiredTop, minTop);
+
+          return {
+            wrapper: { left: 16, right: 16, top: safeTop },
+            arrowOnTop: true,
+            arrowOnBottom: false,
+            arrowAlign: 'flex-start' as const, // left cards
+          };
+        }
+
       case 'pyq_mcq':
-        // Card at bottom, arrow up towards right practice card
-        return {
-          wrapper: { left: 16, right: 16, bottom: 40 },
-          arrowOnTop: true,
-          arrowOnBottom: false,
-          arrowAlign: 'flex-end' as const,
-        };
+        if (!anchors.practiceY || !anchors.subjectsY) return undefined;
+        {
+          const desiredTop = anchors.practiceY - TIP_CARD_HEIGHT - 16;
+          const minTop = anchors.subjectsY + 40;
+          const safeTop = Math.max(desiredTop, minTop);
+
+          return {
+            wrapper: { left: 16, right: 16, top: safeTop },
+            arrowOnTop: true,
+            arrowOnBottom: false,
+            arrowAlign: 'flex-end' as const, // right cards
+          };
+        }
+
       case 'pyq_pdf':
-        // Still bottom sheet, arrow up to lower left card
-        return {
-          wrapper: { left: 16, right: 16, bottom: 40 },
-          arrowOnTop: true,
-          arrowOnBottom: false,
-          arrowAlign: 'flex-start' as const,
-        };
+        if (!anchors.practiceY || !anchors.subjectsY) return undefined;
+        {
+          const desiredTop = anchors.practiceY - TIP_CARD_HEIGHT - 406;
+          const minTop = anchors.subjectsY + 60;
+          const safeTop = Math.max(desiredTop, minTop);
+
+          return {
+            wrapper: { left: 16, right: 16, top: safeTop },
+            arrowOnTop: false,
+            arrowOnBottom: true,
+            arrowAlign: 'flex-start' as const,
+          };
+        }
+
       case 'mock_tests':
-        // Bottom sheet, arrow up to lower right card
-        return {
-          wrapper: { left: 16, right: 16, bottom: 40 },
-          arrowOnTop: true,
-          arrowOnBottom: false,
-          arrowAlign: 'flex-end' as const,
-        };
+        if (!anchors.practiceY || !anchors.subjectsY) return undefined;
+        {
+          const desiredTop = anchors.practiceY - TIP_CARD_HEIGHT - 106;
+          const minTop = anchors.subjectsY + 40;
+          const safeTop = Math.max(desiredTop, minTop);
+
+          return {
+            wrapper: { left: 16, right: 16, top: safeTop },
+            arrowOnTop: false,
+            arrowOnBottom: true,
+            arrowAlign: 'flex-end' as const,
+          };
+        }
+
       case 'banners_theme':
-        // Card below the top bar, arrow down pointing to banners / theme toggle
+        if (!anchors.topAreaY) return undefined;
         return {
-          wrapper: { left: 16, right: 16, top: 120 },
-          arrowOnTop: false,
-          arrowOnBottom: true,
-          arrowAlign: 'flex-end' as const,
-        };
-      default:
-        return {
-          wrapper: { left: 16, right: 16, bottom: 40 },
+          // card just below the top area, arrow up to banners/theme toggle
+          wrapper: { left: 16, right: 16, top: anchors.topAreaY + 8 },
           arrowOnTop: true,
           arrowOnBottom: false,
-          arrowAlign: 'center' as const,
+          arrowAlign: 'flex-end' as const,
         };
+
+      default:
+        return undefined;
     }
-  }, [currentStep]);
+  }, [currentStep, anchors]);
+
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -737,181 +800,210 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
           scrollEnabled={!showIntro} // freeze scroll while tips visible
         >
-          {/* Top app bar */}
-          <View style={styles.topBar}>
-            <View>
-              <Text style={styles.appTitle}>ABS NEET</Text>
-              <Text style={styles.appSubtitle}>NEET Practice App</Text>
-            </View>
+          {/* Top app bar + banners (measured for topAreaY) */}
+          <View
+            onLayout={e => {
+              const { y, height } = e.nativeEvent.layout;
+              setAnchors(prev => ({ ...prev, topAreaY: y + height }));
+            }}
+          >
+            {/* Top app bar */}
+            <View style={styles.topBar}>
+              <View>
+                <Text style={styles.appTitle}>ABS NEET</Text>
+                <Text style={styles.appSubtitle}>NEET Practice App</Text>
+              </View>
 
-            <View style={styles.topRightRow}>
-              {/* Theme toggle */}
-              <Pressable onPress={toggleTheme} style={styles.themeToggle}>
-                <Text style={styles.themeToggleText}>
-                  {isDark ? '☀️ Light' : '🌙 Dark'}
-                </Text>
-              </Pressable>
+              <View style={styles.topRightRow}>
+                {/* Theme toggle */}
+                <Pressable onPress={toggleTheme} style={styles.themeToggle}>
+                  <Text style={styles.themeToggleText}>
+                    {isDark ? '☀️ Light' : '🌙 Dark'}
+                  </Text>
+                </Pressable>
 
-              <View style={styles.neetBadge}>
-                <Text style={styles.neetBadgeText}>NEET 2025</Text>
+                <View style={styles.neetBadge}>
+                  <Text style={styles.neetBadgeText}>NEET 2025</Text>
+                </View>
               </View>
             </View>
+
+            {/* Banner slider */}
+            <View style={styles.bannerWrap}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.bannerScroll}
+              >
+                {HOME_BANNERS.map(b => (
+                  <Pressable
+                    key={b.id}
+                    android_ripple={{ color: isDark ? '#E5E7EB' : '#1E293B' }}
+                    onPress={() => handleBannerPress(b)}
+                    style={({ pressed }) => [
+                      styles.bannerCard,
+                      pressed && styles.bannerCardPressed,
+                    ]}
+                  >
+                    <Image
+                      source={{ uri: b.imageUri }}
+                      style={styles.bannerImage}
+                      resizeMode="cover"
+                    />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
           </View>
 
-          {/* Banner slider */}
-          <View style={styles.bannerWrap}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.bannerScroll}
-            >
-              {HOME_BANNERS.map(b => (
-                <Pressable
-                  key={b.id}
-                  android_ripple={{ color: isDark ? '#E5E7EB' : '#1E293B' }}
-                  onPress={() => handleBannerPress(b)}
-                  style={({ pressed }) => [
-                    styles.bannerCard,
-                    pressed && styles.bannerCardPressed,
-                  ]}
-                >
-                  <Image
-                    source={{ uri: b.imageUri }}
-                    style={styles.bannerImage}
-                    resizeMode="cover"
-                  />
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
+          {/* Subjects section (measured for subjectsY) */}
+          <View
+            onLayout={e => {
+              const { y, height } = e.nativeEvent.layout;
+              setAnchors(prev => ({ ...prev, subjectsY: y + height }));
+            }}
+          >
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Your Subjects</Text>
+              {!!subjects.length && (
+                <Text style={styles.sectionMeta}>{subjects.length} loaded</Text>
+              )}
+            </View>
 
-          {/* Subjects row */}
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Your Subjects</Text>
-            {!!subjects.length && (
-              <Text style={styles.sectionMeta}>{subjects.length} loaded</Text>
+            {subjects.length === 0 ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyTitle}>No subjects in demo data.</Text>
+                <Text style={styles.emptySubtitle}>
+                  Add entries in <Text style={styles.emptyHighlight}>SUBJECTS</Text>{' '}
+                  inside <Text style={styles.emptyHighlight}>src/data/demo.ts</Text>.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={subjects}
+                keyExtractor={s => s.id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingRight: 16 }}
+                renderItem={({ item }) => (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.subjectCard,
+                      pressed && styles.subjectCardPressed,
+                    ]}
+                    onPress={() =>
+                      nav.navigate('SubjectDetail', { subjectId: item.id })
+                    }
+                  >
+                    <Text style={styles.subjectTitle}>{item.name}</Text>
+                    <Text style={styles.subjectMeta}>
+                      {item.units?.length ?? 0} units
+                    </Text>
+                  </Pressable>
+                )}
+              />
             )}
           </View>
 
-          {subjects.length === 0 ? (
-            <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>No subjects in demo data.</Text>
-              <Text style={styles.emptySubtitle}>
-                Add entries in <Text style={styles.emptyHighlight}>SUBJECTS</Text>{' '}
-                inside <Text style={styles.emptyHighlight}>src/data/demo.ts</Text>.
-              </Text>
+          {/* Practice section (measured for practiceY) */}
+          <View
+            onLayout={e => {
+              const { y, height } = e.nativeEvent.layout;
+              setAnchors(prev => ({ ...prev, practiceY: y + height }));
+            }}
+          >
+            {/* Practice modes / quick actions */}
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Practice Modes</Text>
+              <Text style={styles.sectionMeta}>Choose how you want to study</Text>
             </View>
-          ) : (
-            <FlatList
-              data={subjects}
-              keyExtractor={s => s.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingRight: 16 }}
-              renderItem={({ item }) => (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.subjectCard,
-                    pressed && styles.subjectCardPressed,
-                  ]}
-                  onPress={() =>
-                    nav.navigate('SubjectDetail', { subjectId: item.id })
-                  }
-                >
-                  <Text style={styles.subjectTitle}>{item.name}</Text>
-                  <Text style={styles.subjectMeta}>
-                    {item.units?.length ?? 0} units
-                  </Text>
-                </Pressable>
-              )}
-            />
-          )}
 
-          {/* Practice modes / quick actions */}
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Practice Modes</Text>
-            <Text style={styles.sectionMeta}>Choose how you want to study</Text>
-          </View>
+            <View style={styles.cardGrid}>
+              {/* Custom MCQ as per Subject */}
+              <Pressable
+                onLayout={e => {
+                  const { y, height } = e.nativeEvent.layout;
+                  // store vertical center of this card
+                  setAnchors(prev => ({ ...prev, customMcqY: y + height / 2 }));
+                }}
+                style={({ pressed }) => [
+                  styles.modeCard,
+                  styles.modeCardPrimary,
+                  isSubjectDependentDisabled && styles.modeCardDisabled,
+                  pressed &&
+                  !isSubjectDependentDisabled &&
+                  styles.modeCardPrimaryPressed,
+                ]}
+                disabled={isSubjectDependentDisabled}
+                onPress={() =>
+                  firstSubjectId &&
+                  nav.navigate('CustomMCQQuiz', { subjectId: firstSubjectId })
+                }
+              >
 
-          <View style={styles.cardGrid}>
-            {/* Custom MCQ as per Subject */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.modeCard,
-                styles.modeCardPrimary,
-                isSubjectDependentDisabled && styles.modeCardDisabled,
-                pressed &&
-                !isSubjectDependentDisabled &&
-                styles.modeCardPrimaryPressed,
-              ]}
-              disabled={isSubjectDependentDisabled}
-              onPress={() =>
-                firstSubjectId &&
-                nav.navigate('CustomMCQQuiz', { subjectId: firstSubjectId })
-              }
-            >
-              <Text style={styles.modeEmoji}>🧠</Text>
-              <Text style={styles.modeTitlePrimary}>Custom MCQ Quiz</Text>
-              <Text style={styles.modeTextPrimary}>
-                Build a quiz from selected topics of a subject.
-              </Text>
-              {isSubjectDependentDisabled && (
-                <Text style={styles.modeHintPrimary}>
-                  Add at least one subject to begin.
+                <Text style={styles.modeEmoji}>🧠</Text>
+                <Text style={styles.modeTitlePrimary}>Custom MCQ Quiz</Text>
+                <Text style={styles.modeTextPrimary}>
+                  Build a quiz from selected topics of a subject.
                 </Text>
-              )}
-            </Pressable>
+                {isSubjectDependentDisabled && (
+                  <Text style={styles.modeHintPrimary}>
+                    Add at least one subject to begin.
+                  </Text>
+                )}
+              </Pressable>
 
-            {/* Previous Year MCQ – mixed exam */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.modeCard,
-                styles.modeCardAccent,
-                pressed && styles.modeCardAccentPressed,
-              ]}
-              onPress={() => nav.navigate('PYQSubjects')}
-            >
-              <Text style={styles.modeEmoji}>📜</Text>
-              <Text style={styles.modeTitle}>Previous Year MCQ</Text>
-              <Text style={styles.modeText}>
-                Solve full NEET-style mixed MCQ sets (Physics + Chemistry + Bio).
-              </Text>
-              <Text style={styles.modeHint}>Best for real exam practice</Text>
-            </Pressable>
+              {/* Previous Year MCQ – mixed exam */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modeCard,
+                  styles.modeCardAccent,
+                  pressed && styles.modeCardAccentPressed,
+                ]}
+                onPress={() => nav.navigate('PYQSubjects')}
+              >
+                <Text style={styles.modeEmoji}>📜</Text>
+                <Text style={styles.modeTitle}>Previous Year MCQ</Text>
+                <Text style={styles.modeText}>
+                  Solve full NEET-style mixed MCQ sets (Physics + Chemistry + Bio).
+                </Text>
+                <Text style={styles.modeHint}>Best for real exam practice</Text>
+              </Pressable>
 
-            {/* Previous Year MCQ Papers PDF */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.modeCard,
-                styles.modeCardNeutral,
-                pressed && styles.modeCardNeutralPressed,
-              ]}
-              onPress={() => nav.navigate('PYQPdfPapers')}
-            >
-              <Text style={styles.modeEmoji}>📂</Text>
-              <Text style={styles.modeTitle}>PYQ Papers (PDF)</Text>
-              <Text style={styles.modeText}>
-                Download complete NEET papers in PDF for offline solving.
-              </Text>
-              <Text style={styles.modeHint}>Use with OMR sheets</Text>
-            </Pressable>
+              {/* Previous Year MCQ Papers PDF */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modeCard,
+                  styles.modeCardNeutral,
+                  pressed && styles.modeCardNeutralPressed,
+                ]}
+                onPress={() => nav.navigate('PYQPdfPapers')}
+              >
+                <Text style={styles.modeEmoji}>📂</Text>
+                <Text style={styles.modeTitle}>PYQ Papers (PDF)</Text>
+                <Text style={styles.modeText}>
+                  Download complete NEET papers in PDF for offline solving.
+                </Text>
+                <Text style={styles.modeHint}>Use with OMR sheets</Text>
+              </Pressable>
 
-            {/* Mock Test Papers */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.modeCard,
-                styles.modeCardNeutral,
-                pressed && styles.modeCardNeutralPressed,
-              ]}
-              onPress={() => nav.navigate('MockTestPapers')}
-            >
-              <Text style={styles.modeEmoji}>📝</Text>
-              <Text style={styles.modeTitle}>Mock Test Papers</Text>
-              <Text style={styles.modeText}>
-                Attempt full-length mock tests and track improvement.
-              </Text>
-              <Text style={styles.modeHint}>Perfect for weekend practice</Text>
-            </Pressable>
+              {/* Mock Test Papers */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modeCard,
+                  styles.modeCardNeutral,
+                  pressed && styles.modeCardNeutralPressed,
+                ]}
+                onPress={() => nav.navigate('MockTestPapers')}
+              >
+                <Text style={styles.modeEmoji}>📝</Text>
+                <Text style={styles.modeTitle}>Mock Test Papers</Text>
+                <Text style={styles.modeText}>
+                  Attempt full-length mock tests and track improvement.
+                </Text>
+                <Text style={styles.modeHint}>Perfect for weekend practice</Text>
+              </Pressable>
+            </View>
           </View>
         </ScrollView>
 
@@ -925,20 +1017,27 @@ export default function HomeScreen() {
                 styles.introCardWrapper,
                 introPos.wrapper,
               ]}
+              pointerEvents="box-none"
             >
-              {/* Arrow TOP (pointing up to a block above the card) */}
+              {/* Arrow TOP (card below, arrow pointing up to block above) */}
               {introPos.arrowOnTop && (
                 <View
                   style={[
                     styles.arrowRow,
                     { justifyContent: introPos.arrowAlign },
                   ]}
+                  pointerEvents="none"
                 >
-                  <View style={styles.arrowUp} />
+                  <Image
+                    source={ArrowWaveUp}
+                    style={styles.waveArrowImageTop}
+                  />
                 </View>
               )}
 
-              <View style={styles.introCard}>
+
+              {/* Tip card */}
+              <View style={styles.introCard} pointerEvents="auto">
                 <View style={styles.introHeaderRow}>
                   <Text style={styles.introStepBadge}>
                     {introStep + 1}/{INTRO_STEPS.length}
@@ -973,20 +1072,26 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              {/* Arrow BOTTOM (pointing down to a block below the card) */}
+              {/* Arrow BOTTOM (card above, arrow pointing down to block below) */}
               {introPos.arrowOnBottom && (
                 <View
                   style={[
                     styles.arrowRow,
                     { justifyContent: introPos.arrowAlign },
                   ]}
+                  pointerEvents="none"
                 >
-                  <View style={styles.arrowDown} />
+                  <Image
+                    source={ArrowWaveUp}
+                    style={styles.waveArrowImageBottom}
+                  />
                 </View>
               )}
+
             </View>
           </View>
         )}
+
       </View>
     </SafeAreaView>
   );
@@ -1324,13 +1429,48 @@ const createStyles = (isDark: boolean) =>
       color: '#F9FAFB',
       fontWeight: '600',
     },
-
+    // 🔹 Wavy arrow styles
+    waveColumn: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    waveSegment: {
+      width: 28,
+      height: 2,
+      borderRadius: 999,
+      backgroundColor: isDark ? '#FACC15' : '#F97316', // warm accent
+      marginVertical: 2,
+    },
+    waveSegment1: {
+      transform: [{ rotate: '-25deg' }], // first curve
+    },
+    waveSegment2: {
+      transform: [{ rotate: '12deg' }],  // opposite curve
+    },
+    waveSegment3: {
+      transform: [{ rotate: '-8deg' }],  // soft finish
+    },
     // 🔹 Arrow styles
-    arrowRow: {
+    arrowRowTop: {
       width: '100%',
       flexDirection: 'row',
-      marginBottom: 4,
-      marginTop: 4,
+      marginBottom: 6,   // gap between arrow and card when arrow is on TOP
+    },
+
+    arrowRowBottom: {
+      width: '100%',
+      flexDirection: 'row',
+      marginTop: 12,     // bigger gap so arrow sits fully BELOW the card
+    },
+
+    tipColumn: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    tipBar: {
+      width: 2,
+      height: 22,
+      backgroundColor: isDark ? '#E5E7EB' : '#111827',
     },
     arrowDown: {
       width: 0,
@@ -1352,4 +1492,59 @@ const createStyles = (isDark: boolean) =>
       borderRightColor: 'transparent',
       borderBottomColor: isDark ? '#020617' : '#FFFFFF',
     },
+
+    arrowRow: {
+      width: '100%',
+      flexDirection: 'row',
+      // This controls how “close” the arrow sticks to the card
+      marginTop: -40,   // pull upwards a bit
+      marginBottom: 0,
+    },
+
+    waveArrowImageTop: {
+      width: 90,
+      height: 90,
+      resizeMode: 'contain',
+      // move image closer / further from the card
+      marginBottom: -10,
+    },
+
+    waveArrowImageBottom: {
+      width: 90,
+      height: 90,
+      resizeMode: 'contain',
+      transform: [{ rotate: '180deg' }], // flip to point down
+      marginTop: -10,
+    },
+
+
+    // tipColumn: {
+    //   alignItems: 'center',
+    //   justifyContent: 'center',
+    // },
+    // tipBar: {
+    //   width: 2,
+    //   height: 22, // length of the bar between card and block
+    //   backgroundColor: isDark ? '#E5E7EB' : '#111827',
+    // },
+    // arrowDown: {
+    //   width: 0,
+    //   height: 0,
+    //   borderLeftWidth: 10,
+    //   borderRightWidth: 10,
+    //   borderTopWidth: 12,
+    //   borderLeftColor: 'transparent',
+    //   borderRightColor: 'transparent',
+    //   borderTopColor: isDark ? '#020617' : '#FFFFFF',
+    // },
+    // arrowUp: {
+    //   width: 0,
+    //   height: 0,
+    //   borderLeftWidth: 10,
+    //   borderRightWidth: 10,
+    //   borderBottomWidth: 12,
+    //   borderLeftColor: 'transparent',
+    //   borderRightColor: 'transparent',
+    //   borderBottomColor: isDark ? '#020617' : '#FFFFFF',
+    // },
   });
