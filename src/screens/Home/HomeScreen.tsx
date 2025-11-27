@@ -500,9 +500,7 @@
 //       color: isDark ? '#9CA3AF' : '#6B7280',
 //       marginTop: 6,
 //     },
-//   });
-
-// src/screens/Home/HomeScreen.tsx
+//   });// src/screens/Home/HomeScreen.tsx
 import React, {
   useMemo,
   useCallback,
@@ -524,13 +522,16 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// 🔹 Firestore (RN Firebase) – make sure this path matches your project
+import { db } from '../../services/firebase.native';
+
 import { RootStackParamList } from '../../navigation/rootnavigator';
 import { useTheme } from '../../theme/ThemeContext';
 import { SUBJECTS, Subject } from '../../data/demo';
-// import ArrowWaveUp from '../../assets/intro/arrow_wave_up.png';
 
-// ✅ correct
+// Curved arrow asset
 const ArrowWaveUp = require('../../assets/intro/arrow_wave_up.png');
+
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 type HomeBanner = {
@@ -556,7 +557,8 @@ const HOME_BANNERS: HomeBanner[] = [
     link: 'https://absedu.in/blog/neet-tips',
   },
 ];
-const TIP_CARD_HEIGHT = 150;      // already using this
+
+const TIP_CARD_HEIGHT = 150;      // approximate height of the tip card
 const WAVE_ARROW_HEIGHT = 80;     // approximate arrow image height
 
 // All tips in sequence
@@ -605,18 +607,17 @@ export default function HomeScreen() {
   const nav = useNavigation<Nav>();
   const { isDark, toggleTheme } = useTheme();
 
-  const subjects: Subject[] = SUBJECTS;
+  // 🔹 Subjects from Firestore (fallback to demo)
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjectsLoading, setSubjectsLoading] = useState(true);
+  const [subjectsError, setSubjectsError] = useState<string | null>(null);
+
   const firstSubjectId = subjects[0]?.id;
   const isSubjectDependentDisabled = !firstSubjectId;
 
   const styles = useMemo(() => createStyles(isDark), [isDark]);
 
   // 🔹 anchors for dynamic positioning
-  // const [anchors, setAnchors] = useState({
-  //   topAreaY: 0,     // bottom of top bar + banners
-  //   subjectsY: 0,    // bottom of subjects section
-  //   practiceY: 0,    // bottom of practice section
-  // });
   const [anchors, setAnchors] = useState({
     topAreaY: 0,      // bottom of top bar + banners
     subjectsY: 0,     // bottom of subjects section
@@ -631,6 +632,51 @@ export default function HomeScreen() {
   const [showIntro, setShowIntro] = useState(true);
   const [introStep, setIntroStep] = useState(0); // index in INTRO_STEPS
 
+  // 🔥 Load subjects from Firestore
+  useEffect(() => {
+    const loadSubjects = async () => {
+      try {
+        setSubjectsLoading(true);
+        setSubjectsError(null);
+
+        console.log('[HOME] loading subjects from Firestore...');
+
+        const snap = await db
+          .collection('nodes')
+          .where('type', '==', 'subject')
+          .orderBy('order', 'asc')
+          .get();
+
+        if (snap.empty) {
+          console.log('[HOME] no Firestore subjects, using demo SUBJECTS');
+          setSubjects(SUBJECTS);
+        } else {
+          const items: Subject[] = snap.docs.map(doc => {
+            const data = doc.data() as any;
+            return {
+              id: doc.id,
+              name: data.name ?? data.title ?? 'Untitled subject',
+              // If you store units/chapters in Firestore, map them here.
+              // For now we just ensure units is an array to satisfy type.
+              units: data.units ?? [],
+            } as Subject;
+          });
+          setSubjects(items);
+          console.log('[HOME] subjects loaded:', items.length);
+        }
+      } catch (err) {
+        console.warn('[HOME] Failed to load subjects from Firestore, using demo data', err);
+        setSubjectsError('Failed to load subjects from cloud. Showing demo data.');
+        setSubjects(SUBJECTS);
+      } finally {
+        setSubjectsLoading(false);
+      }
+    };
+
+    loadSubjects();
+  }, []);
+
+  // 🔹 Intro flag
   useEffect(() => {
     const loadIntroFlag = async () => {
       try {
@@ -696,7 +742,6 @@ export default function HomeScreen() {
   // 🔹 Position + arrow config for each step (dynamic using anchors)
   const introPos = useMemo(() => {
     if (!currentStep) return undefined;
-    const TIP_CARD_HEIGHT = 150; // approximate height of the tip card
 
     const id = currentStep.id as IntroStepId;
 
@@ -711,69 +756,69 @@ export default function HomeScreen() {
           arrowAlign: 'center' as const,
         };
 
-      case 'custom_mcq':
+      case 'custom_mcq': {
         const targetY = anchors.practiceY;
         if (!anchors.practiceY || !anchors.subjectsY) return undefined;
-        {
-          // place card ABOVE the practice grid, arrow DOWN to left side
-          // const desiredTop = anchors.practiceY - TIP_CARD_HEIGHT - 56;
-          const desiredTop = targetY - (TIP_CARD_HEIGHT + WAVE_ARROW_HEIGHT + 16);
 
-          const minTop = anchors.subjectsY - 50; // don't go too close to subjects
-          const safeTop = Math.max(desiredTop, minTop);
+        const desiredTop =
+          targetY - (TIP_CARD_HEIGHT + WAVE_ARROW_HEIGHT + 16);
+        const minTop = anchors.subjectsY - 50; // don't go too close to subjects
+        const safeTop = Math.max(desiredTop, minTop);
 
-          return {
-            wrapper: { left: 16, right: 16, top: safeTop },
-            arrowOnTop: true,
-            arrowOnBottom: false,
-            arrowAlign: 'flex-start' as const, // left cards
-          };
-        }
+        return {
+          wrapper: { left: 16, right: 16, top: safeTop },
+          arrowOnTop: true,
+          arrowOnBottom: false,
+          arrowAlign: 'flex-start' as const, // left cards
+        };
+      }
 
-      case 'pyq_mcq':
+      case 'pyq_mcq': {
         if (!anchors.practiceY || !anchors.subjectsY) return undefined;
-        {
-          const desiredTop = anchors.practiceY - TIP_CARD_HEIGHT - 16;
-          const minTop = anchors.subjectsY + 40;
-          const safeTop = Math.max(desiredTop, minTop);
 
-          return {
-            wrapper: { left: 16, right: 16, top: safeTop },
-            arrowOnTop: true,
-            arrowOnBottom: false,
-            arrowAlign: 'flex-end' as const, // right cards
-          };
-        }
+        const desiredTop = anchors.practiceY - TIP_CARD_HEIGHT - 16;
+        const minTop = anchors.subjectsY + 40;
+        const safeTop = Math.max(desiredTop, minTop);
 
-      case 'pyq_pdf':
+        return {
+          wrapper: { left: 16, right: 16, top: safeTop },
+          arrowOnTop: true,
+          arrowOnBottom: false,
+          arrowAlign: 'flex-end' as const, // right cards
+        };
+      }
+
+      case 'pyq_pdf': {
         if (!anchors.practiceY || !anchors.subjectsY) return undefined;
-        {
-          const desiredTop = anchors.practiceY - TIP_CARD_HEIGHT - 406;
-          const minTop = anchors.subjectsY + 60;
-          const safeTop = Math.max(desiredTop, minTop);
 
-          return {
-            wrapper: { left: 16, right: 16, top: safeTop },
-            arrowOnTop: false,
-            arrowOnBottom: true,
-            arrowAlign: 'flex-start' as const,
-          };
-        }
+        const desiredTop =
+          anchors.practiceY - TIP_CARD_HEIGHT - 406;
+        const minTop = anchors.subjectsY + 60;
+        const safeTop = Math.max(desiredTop, minTop);
 
-      case 'mock_tests':
+        return {
+          wrapper: { left: 16, right: 16, top: safeTop },
+          arrowOnTop: false,
+          arrowOnBottom: true,
+          arrowAlign: 'flex-start' as const,
+        };
+      }
+
+      case 'mock_tests': {
         if (!anchors.practiceY || !anchors.subjectsY) return undefined;
-        {
-          const desiredTop = anchors.practiceY - TIP_CARD_HEIGHT - 106;
-          const minTop = anchors.subjectsY + 40;
-          const safeTop = Math.max(desiredTop, minTop);
 
-          return {
-            wrapper: { left: 16, right: 16, top: safeTop },
-            arrowOnTop: false,
-            arrowOnBottom: true,
-            arrowAlign: 'flex-end' as const,
-          };
-        }
+        const desiredTop =
+          anchors.practiceY - TIP_CARD_HEIGHT - 106;
+        const minTop = anchors.subjectsY + 40;
+        const safeTop = Math.max(desiredTop, minTop);
+
+        return {
+          wrapper: { left: 16, right: 16, top: safeTop },
+          arrowOnTop: false,
+          arrowOnBottom: true,
+          arrowAlign: 'flex-end' as const,
+        };
+      }
 
       case 'banners_theme':
         if (!anchors.topAreaY) return undefined;
@@ -789,7 +834,6 @@ export default function HomeScreen() {
         return undefined;
     }
   }, [currentStep, anchors]);
-
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -865,17 +909,29 @@ export default function HomeScreen() {
           >
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Your Subjects</Text>
-              {!!subjects.length && (
+              {!!subjects.length && !subjectsLoading && (
                 <Text style={styles.sectionMeta}>{subjects.length} loaded</Text>
               )}
             </View>
 
-            {subjects.length === 0 ? (
+            {subjectsError && (
+              <Text style={styles.errorText}>{subjectsError}</Text>
+            )}
+
+            {subjectsLoading ? (
               <View style={styles.empty}>
-                <Text style={styles.emptyTitle}>No subjects in demo data.</Text>
+                <Text style={styles.emptyTitle}>Loading subjects…</Text>
+                <Text style={styles.emptySubtitle}>
+                  Fetching from ABS NEET cloud.
+                </Text>
+              </View>
+            ) : subjects.length === 0 ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyTitle}>No subjects available.</Text>
                 <Text style={styles.emptySubtitle}>
                   Add entries in <Text style={styles.emptyHighlight}>SUBJECTS</Text>{' '}
-                  inside <Text style={styles.emptyHighlight}>src/data/demo.ts</Text>.
+                  inside <Text style={styles.emptyHighlight}>src/data/demo.ts</Text>{' '}
+                  or create subject docs in Firestore.
                 </Text>
               </View>
             ) : (
@@ -940,7 +996,6 @@ export default function HomeScreen() {
                   nav.navigate('CustomMCQQuiz', { subjectId: firstSubjectId })
                 }
               >
-
                 <Text style={styles.modeEmoji}>🧠</Text>
                 <Text style={styles.modeTitlePrimary}>Custom MCQ Quiz</Text>
                 <Text style={styles.modeTextPrimary}>
@@ -1035,7 +1090,6 @@ export default function HomeScreen() {
                 </View>
               )}
 
-
               {/* Tip card */}
               <View style={styles.introCard} pointerEvents="auto">
                 <View style={styles.introHeaderRow}>
@@ -1087,7 +1141,6 @@ export default function HomeScreen() {
                   />
                 </View>
               )}
-
             </View>
           </View>
         )}
@@ -1213,6 +1266,12 @@ const createStyles = (isDark: boolean) =>
     sectionMeta: {
       fontSize: 12,
       color: isDark ? '#9CA3AF' : '#6B7280',
+    },
+
+    errorText: {
+      fontSize: 11,
+      color: '#F97316',
+      marginBottom: 4,
     },
 
     empty: {
@@ -1429,122 +1488,56 @@ const createStyles = (isDark: boolean) =>
       color: '#F9FAFB',
       fontWeight: '600',
     },
-    // 🔹 Wavy arrow styles
-    waveColumn: {
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    waveSegment: {
-      width: 28,
-      height: 2,
-      borderRadius: 999,
-      backgroundColor: isDark ? '#FACC15' : '#F97316', // warm accent
-      marginVertical: 2,
-    },
-    waveSegment1: {
-      transform: [{ rotate: '-25deg' }], // first curve
-    },
-    waveSegment2: {
-      transform: [{ rotate: '12deg' }],  // opposite curve
-    },
-    waveSegment3: {
-      transform: [{ rotate: '-8deg' }],  // soft finish
-    },
-    // 🔹 Arrow styles
-    arrowRowTop: {
-      width: '100%',
-      flexDirection: 'row',
-      marginBottom: 6,   // gap between arrow and card when arrow is on TOP
-    },
 
-    arrowRowBottom: {
-      width: '100%',
-      flexDirection: 'row',
-      marginTop: 12,     // bigger gap so arrow sits fully BELOW the card
-    },
-
-    tipColumn: {
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    tipBar: {
-      width: 2,
-      height: 22,
-      backgroundColor: isDark ? '#E5E7EB' : '#111827',
-    },
-    arrowDown: {
-      width: 0,
-      height: 0,
-      borderLeftWidth: 10,
-      borderRightWidth: 10,
-      borderTopWidth: 12,
-      borderLeftColor: 'transparent',
-      borderRightColor: 'transparent',
-      borderTopColor: isDark ? '#020617' : '#FFFFFF',
-    },
-    arrowUp: {
-      width: 0,
-      height: 0,
-      borderLeftWidth: 10,
-      borderRightWidth: 10,
-      borderBottomWidth: 12,
-      borderLeftColor: 'transparent',
-      borderRightColor: 'transparent',
-      borderBottomColor: isDark ? '#020617' : '#FFFFFF',
-    },
-
+    // 🔹 Arrow styles for curved PNG
     arrowRow: {
       width: '100%',
       flexDirection: 'row',
-      // This controls how “close” the arrow sticks to the card
-      marginTop: -40,   // pull upwards a bit
+      marginTop: -40,
       marginBottom: 0,
     },
-
     waveArrowImageTop: {
       width: 90,
       height: 90,
       resizeMode: 'contain',
-      // move image closer / further from the card
       marginBottom: -10,
     },
-
     waveArrowImageBottom: {
       width: 90,
       height: 90,
       resizeMode: 'contain',
-      transform: [{ rotate: '180deg' }], // flip to point down
+      transform: [{ rotate: '180deg' }],
       marginTop: -10,
     },
-
-
-    // tipColumn: {
-    //   alignItems: 'center',
-    //   justifyContent: 'center',
-    // },
-    // tipBar: {
-    //   width: 2,
-    //   height: 22, // length of the bar between card and block
-    //   backgroundColor: isDark ? '#E5E7EB' : '#111827',
-    // },
-    // arrowDown: {
-    //   width: 0,
-    //   height: 0,
-    //   borderLeftWidth: 10,
-    //   borderRightWidth: 10,
-    //   borderTopWidth: 12,
-    //   borderLeftColor: 'transparent',
-    //   borderRightColor: 'transparent',
-    //   borderTopColor: isDark ? '#020617' : '#FFFFFF',
-    // },
-    // arrowUp: {
-    //   width: 0,
-    //   height: 0,
-    //   borderLeftWidth: 10,
-    //   borderRightWidth: 10,
-    //   borderBottomWidth: 12,
-    //   borderLeftColor: 'transparent',
-    //   borderRightColor: 'transparent',
-    //   borderBottomColor: isDark ? '#020617' : '#FFFFFF',
-    // },
   });
+
+// tipColumn: {
+//   alignItems: 'center',
+//   justifyContent: 'center',
+// },
+// tipBar: {
+//   width: 2,
+//   height: 22, // length of the bar between card and block
+//   backgroundColor: isDark ? '#E5E7EB' : '#111827',
+// },
+// arrowDown: {
+//   width: 0,
+//   height: 0,
+//   borderLeftWidth: 10,
+//   borderRightWidth: 10,
+//   borderTopWidth: 12,
+//   borderLeftColor: 'transparent',
+//   borderRightColor: 'transparent',
+//   borderTopColor: isDark ? '#020617' : '#FFFFFF',
+// },
+// arrowUp: {
+//   width: 0,
+//   height: 0,
+//   borderLeftWidth: 10,
+//   borderRightWidth: 10,
+//   borderBottomWidth: 12,
+//   borderLeftColor: 'transparent',
+//   borderRightColor: 'transparent',
+//   borderBottomColor: isDark ? '#020617' : '#FFFFFF',
+// },
+// });

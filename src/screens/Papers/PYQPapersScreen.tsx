@@ -1,47 +1,136 @@
 // src/screens/PYQ/PYQPapersScreen.tsx
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     View,
     Text,
     FlatList,
     TouchableOpacity,
     StyleSheet,
+    ActivityIndicator,
+    Linking,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/RootNavigator';
-import { PYQ_PAPERS } from '../../data/demo';
-import { useTheme } from '../../theme/ThemeContext'; // ✅ theme
 
+import { useTheme } from '../../theme/ThemeContext'; // ✅ theme
+import { db } from '../../firebase';                 // ✅ Firestore
+import {
+    collection,
+    getDocs,
+    query,
+    where,
+    orderBy,
+} from 'firebase/firestore';
+
+// type Props = NativeStackScreenProps<RootStackParamList, 'PYQPdfPapers'>;
 type Props = NativeStackScreenProps<RootStackParamList, 'PYQPapers'>;
+
+// Shape of each Firestore document in pyqPdfPapers
+type PyqPaperDoc = {
+    id: string;
+    subjectId: string;
+    subjectName?: string;
+    exam: string;
+    year: number;
+    title: string;
+    pdfUrl?: string;
+};
 
 export default function PYQPapersScreen({ route, navigation }: Props) {
     const { subjectId, subjectName } = route.params;
 
-    const { isDark } = useTheme();                       // ✅ read theme
-    const styles = useMemo(() => createStyles(isDark), [isDark]); // ✅ themed styles
+    const { isDark } = useTheme();
+    const styles = useMemo(() => createStyles(isDark), [isDark]);
 
-    // 🔹 Get all PYQ MCQ papers for this subject, latest year first
-    const papers = useMemo(
-        () =>
-            PYQ_PAPERS
-                .filter(p => p.subjectId === subjectId)
-                .sort((a, b) => b.year - a.year),
-        [subjectId],
-    );
+    const [papers, setPapers] = useState<PyqPaperDoc[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const load = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+
+                if (!subjectId) {
+                    setError('No subject selected.');
+                    setPapers([]);
+                    return;
+                }
+
+                const col = collection(db, 'pyqPdfPapers');
+                const q = query(
+                    col,
+                    where('subjectId', '==', subjectId),
+                    orderBy('year', 'desc')
+                );
+
+                const snap = await getDocs(q);
+                const list: PyqPaperDoc[] = snap.docs.map(d => {
+                    const data = d.data() as any;
+                    return {
+                        id: d.id,
+                        subjectId: data.subjectId,
+                        subjectName: data.subjectName,
+                        exam: data.exam ?? 'NEET',
+                        year: data.year ?? 0,
+                        title:
+                            data.title ??
+                            `${data.exam ?? 'NEET'} ${data.year ?? ''} – Full Paper`,
+                        pdfUrl: data.pdfUrl,
+                    };
+                });
+
+                setPapers(list);
+            } catch (e: any) {
+                console.error('[PYQPapersScreen] load error', e);
+                setError('Failed to load PYQ papers. Please try again.');
+                setPapers([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        load();
+    }, [subjectId]);
+
+    const openPdf = (url?: string) => {
+        if (!url) return;
+        Linking.openURL(url).catch(err =>
+            console.warn('Failed to open PDF URL:', err),
+        );
+    };
+
+    if (loading) {
+        return (
+            <View style={styles.center}>
+                <ActivityIndicator color={isDark ? '#E5E7EB' : '#4B5563'} />
+                <Text style={styles.loadingText}>Loading PYQ papers…</Text>
+            </View>
+        );
+    }
+
+    if (error) {
+        return (
+            <View style={styles.center}>
+                <Text style={styles.errorText}>{error}</Text>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.c}>
             <Text style={styles.heading}>
-                {subjectName} – Previous Year MCQ Papers
+                {subjectName} – Previous Year Question Papers (PDF)
             </Text>
             <Text style={styles.subheading}>
-                Practice full previous year MCQ papers, year-wise.
+                View and download full previous year question papers as PDF, year-wise.
             </Text>
 
             {papers.length === 0 ? (
                 <View style={styles.emptyWrap}>
                     <Text style={styles.emptyText}>
-                        No previous year MCQ papers added yet for this subject.
+                        No previous year papers added yet for this subject.
                     </Text>
                 </View>
             ) : (
@@ -49,47 +138,38 @@ export default function PYQPapersScreen({ route, navigation }: Props) {
                     data={papers}
                     keyExtractor={p => p.id}
                     contentContainerStyle={{ paddingBottom: 16 }}
-                    renderItem={({ item }) => {
-                        const questionCount = item.questions.length;
-
-                        return (
-                            <View style={styles.paperCard}>
-                                {/* Top row: Year + exam + questions badge */}
-                                <View style={styles.topRow}>
-                                    <View>
-                                        <Text style={styles.yearText}>{item.year}</Text>
-                                        <Text style={styles.examText}>
-                                            {item.exam} · MCQ Paper
-                                        </Text>
-                                    </View>
-                                    <View style={styles.badge}>
-                                        <Text style={styles.badgeText}>
-                                            {questionCount} Qs
-                                        </Text>
-                                    </View>
-                                </View>
-
-                                {/* Title / description */}
-                                <Text style={styles.paperTitle}>{item.title}</Text>
-
-                                {/* Action */}
-                                <View style={styles.footerRow}>
-                                    <TouchableOpacity
-                                        style={styles.solveBtn}
-                                        onPress={() =>
-                                            navigation.navigate('MCQQuiz', {
-                                                subjectId,
-                                                title: item.title,      // shows on quiz & result
-                                                questions: item.questions,
-                                            })
-                                        }
-                                    >
-                                        <Text style={styles.solveBtnText}>Solve MCQ Paper</Text>
-                                    </TouchableOpacity>
+                    renderItem={({ item }) => (
+                        <View style={styles.paperCard}>
+                            {/* Top row: year + exam */}
+                            <View style={styles.topRow}>
+                                <View>
+                                    <Text style={styles.yearText}>{item.year}</Text>
+                                    <Text style={styles.examText}>
+                                        {item.exam} · Question Paper (PDF)
+                                    </Text>
                                 </View>
                             </View>
-                        );
-                    }}
+
+                            {/* Title */}
+                            <Text style={styles.paperTitle}>{item.title}</Text>
+
+                            {/* PDF action */}
+                            <View style={styles.footerRow}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.solveBtn,
+                                        !item.pdfUrl && { opacity: 0.4 },
+                                    ]}
+                                    disabled={!item.pdfUrl}
+                                    onPress={() => openPdf(item.pdfUrl)}
+                                >
+                                    <Text style={styles.solveBtnText}>
+                                        {item.pdfUrl ? 'Open PDF' : 'PDF not available'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
                 />
             )}
         </View>
@@ -103,6 +183,23 @@ const createStyles = (isDark: boolean) =>
             flex: 1,
             padding: 16,
             backgroundColor: isDark ? '#020617' : '#F9FAFB',
+        },
+        center: {
+            flex: 1,
+            padding: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: isDark ? '#020617' : '#F9FAFB',
+        },
+        loadingText: {
+            marginTop: 8,
+            fontSize: 13,
+            color: isDark ? '#E5E7EB' : '#4B5563',
+        },
+        errorText: {
+            fontSize: 13,
+            color: '#F97373',
+            textAlign: 'center',
         },
         heading: {
             fontSize: 18,
@@ -148,17 +245,6 @@ const createStyles = (isDark: boolean) =>
             fontSize: 12,
             color: isDark ? '#9CA3AF' : '#6B7280',
             marginTop: 2,
-        },
-        badge: {
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-            borderRadius: 999,
-            backgroundColor: isDark ? '#1E293B' : '#EEF2FF',
-        },
-        badgeText: {
-            fontSize: 12,
-            fontWeight: '600',
-            color: isDark ? '#C4B5FD' : '#4F46E5',
         },
         paperTitle: {
             fontSize: 14,

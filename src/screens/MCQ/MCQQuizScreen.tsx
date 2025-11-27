@@ -10,21 +10,29 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 
-// 🔹 Static data
-import {
-  SUBJECTS,
-  Subject,
-  Unit,
-  Chapter,
-  Question as DemoQuestion,
-} from '../../data/demo';
+import { useTheme } from '../../theme/ThemeContext';
 
-import { useTheme } from '../../theme/ThemeContext';  // ✅ theme
+// 🔹 Firestore (same style as McqIntroScreen)
+import { db } from '../../firebase';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  where,
+} from 'firebase/firestore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MCQQuiz'>;
 
-// Reuse Question type from demo.ts
-type Question = DemoQuestion;
+// 🔹 Same Question shape as admin ChaptersPage
+type Question = {
+  id: string;
+  q: string;
+  options: string[];
+  correctIndex: number;
+};
 
 type ChapterDoc = {
   name?: string;
@@ -46,8 +54,8 @@ export default function MCQQuizScreen({ route, navigation }: Props) {
     title?: string;
   };
 
-  const { isDark } = useTheme();                       // ✅ read global theme
-  const styles = useMemo(() => createStyles(isDark), [isDark]); // ✅ recompute when toggled
+  const { isDark } = useTheme();
+  const styles = useMemo(() => createStyles(isDark), [isDark]);
 
   const [chapter, setChapter] = useState<ChapterDoc | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -56,106 +64,105 @@ export default function MCQQuizScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 🔹 Detect "subject-only" mode (full subject quiz, no unit/chapter)
+  // 🔹 Full subject mode = only subjectId, no unitId/chapterId and no injected questions
   const isSubjectOnlyMode =
     !!subjectId && !unitId && !chapterId && !routeQuestions;
 
   useEffect(() => {
-    const load = () => {
+    const load = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // 1️⃣ Custom / PYQ / Firestore mode → questions passed via route
-        if (routeQuestions && Array.isArray(routeQuestions) && routeQuestions.length > 0) {
+        // 1️⃣ Custom / PYQ / any pre-built quiz: questions are passed via route
+        if (
+          routeQuestions &&
+          Array.isArray(routeQuestions) &&
+          routeQuestions.length > 0
+        ) {
           const qs = routeQuestions as Question[];
           setQuestions(qs);
           setChapter({ name: title });
           setIdx(0);
-          setAnswers(new Array(qs.length).fill(-1)); // -1 = not answered
+          setAnswers(new Array(qs.length).fill(-1));
           return;
         }
 
-        // 2️⃣ Full Subject MCQ → only subjectId passed (NO unitId / chapterId)
+        // 2️⃣ Full Subject MCQ – gather all chapter.questions for this subject from Firestore
         if (isSubjectOnlyMode && subjectId) {
-          const subject: Subject | undefined = SUBJECTS.find(
-            s => s.id === subjectId,
-          );
-          if (!subject) {
-            setError('Subject not found in demo data.');
-            return;
-          }
+          try {
+            const qRef = query(
+              collection(db, 'nodes'),
+              where('type', '==', 'chapter'),
+              where('subjectId', '==', subjectId),
+              orderBy('order', 'asc')
+            );
 
-          const collected: Question[] = [];
-          subject.units.forEach((unit: Unit) => {
-            unit.chapters.forEach((chapter: Chapter) => {
-              const qs = (chapter.questions || []) as Question[];
+            const snap = await getDocs(qRef);
+
+            const collected: Question[] = [];
+            snap.forEach(d => {
+              const data = d.data() as ChapterDoc;
+              const qs = (data.questions || []) as Question[];
               if (qs && qs.length) {
                 collected.push(...qs);
               }
             });
-          });
 
-          if (!collected.length) {
-            setError('No MCQs found for this subject yet.');
+            if (!collected.length) {
+              setError('No MCQs found for this subject yet.');
+              return;
+            }
+
+            setChapter({
+              name: title || 'Full Subject MCQ',
+              questions: collected,
+            });
+            setQuestions(collected);
+            setIdx(0);
+            setAnswers(new Array(collected.length).fill(-1));
+            return;
+          } catch (e: any) {
+            console.error('[MCQQuizScreen] subject-only Firestore load error', e);
+            if (e?.code === 'failed-precondition') {
+              setError(
+                'Firestore index missing for (type, subjectId, order). Please create the composite index in console.'
+              );
+            } else {
+              setError('Failed to load subject MCQs.');
+            }
             return;
           }
-
-          setChapter({
-            name: title || `${subject.name} – Full Subject MCQ`,
-            questions: collected,
-          });
-          setQuestions(collected);
-          setIdx(0);
-          setAnswers(new Array(collected.length).fill(-1));
-          return;
         }
 
-        // 3️⃣ Chapter-wise mode → subjectId + unitId + chapterId required
-        if (!subjectId || !unitId || !chapterId) {
+        // 3️⃣ Chapter-wise mode → read single chapter doc from Firestore
+        if (!chapterId) {
           setError('No chapter selected.');
           return;
         }
 
-        // Find subject
-        const subject: Subject | undefined = SUBJECTS.find(
-          s => s.id === subjectId,
-        );
-        if (!subject) {
-          setError('Subject not found in demo data.');
+        const ref = doc(db, 'nodes', chapterId);
+        const snap = await getDoc(ref);
+
+        if (!snap.exists()) {
+          setError('Chapter not found.');
           return;
         }
 
-        // Find unit
-        const unit: Unit | undefined = subject.units.find(
-          u => u.id === unitId,
-        );
-        if (!unit) {
-          setError('Unit not found in demo data.');
-          return;
-        }
+        const data = snap.data() as ChapterDoc;
+        const qs = (data.questions || []) as Question[];
 
-        // Find chapter
-        const ch: Chapter | undefined = unit.chapters.find(
-          c => c.id === chapterId,
-        );
-        if (!ch) {
-          setError('Chapter not found in demo data.');
-          return;
-        }
-
-        const qs = (ch.questions || []) as Question[];
         if (!qs.length) {
           setError('No questions in this chapter.');
           return;
         }
 
-        setChapter({ name: ch.name, questions: qs });
+        setChapter({ name: data.name, questions: qs });
         setQuestions(qs);
         setIdx(0);
         setAnswers(new Array(qs.length).fill(-1));
       } catch (e: any) {
-        console.error('[MCQQuizScreen] load error (demo.ts)', e);
+        console.error('[MCQQuizScreen] load error', e);
         setError('Failed to load questions.');
       } finally {
         setLoading(false);
@@ -165,7 +172,7 @@ export default function MCQQuizScreen({ route, navigation }: Props) {
     load();
   }, [subjectId, unitId, chapterId, routeQuestions, title, isSubjectOnlyMode]);
 
-  // 🔹 Loading / error states
+  // ---------- Loading / error ----------
   if (loading) {
     return (
       <View style={styles.cCenter}>
@@ -191,29 +198,27 @@ export default function MCQQuizScreen({ route, navigation }: Props) {
     );
   }
 
+  // ---------- Quiz logic ----------
   const total = questions.length;
   const q = questions[idx];
 
   const isFirst = idx === 0;
   const isLast = idx === total - 1;
 
-  // 🔹 Select option → only marks answer, no auto-next
   const handleSelect = (choice: number) => {
     const next = [...answers];
     next[idx] = choice;
     setAnswers(next);
   };
 
-  // 🔹 Previous / Next / Submit handlers
   const handlePrev = () => {
-    if (!isFirst) {
-      setIdx(idx - 1);
-    }
+    if (!isFirst) setIdx(idx - 1);
   };
 
   const handleSubmit = () => {
     const correct = questions.reduce(
-      (acc, qq, i) => acc + ((answers[i] ?? -1) === qq.correctIndex ? 1 : 0),
+      (acc, qq, i) =>
+        acc + ((answers[i] ?? -1) === qq.correctIndex ? 1 : 0),
       0,
     );
 
@@ -221,21 +226,19 @@ export default function MCQQuizScreen({ route, navigation }: Props) {
       title: title || chapter?.name || 'Quiz Result',
       correct,
       total: questions.length,
-      questions,   // from demo.ts or route
-      answers,     // number[]
+      questions,
+      answers,
     });
   };
 
   const handleNext = () => {
-    if (isLast) {
-      handleSubmit();
-    } else {
-      setIdx(idx + 1);
-    }
+    if (isLast) handleSubmit();
+    else setIdx(idx + 1);
   };
 
   const nextLabel = isLast ? 'Submit Quiz' : 'Next';
 
+  // ---------- UI ----------
   return (
     <View style={styles.c}>
       <Text style={styles.h}>
@@ -302,7 +305,7 @@ export default function MCQQuizScreen({ route, navigation }: Props) {
   );
 }
 
-// 🔧 Theme-aware styles
+// 🔧 Theme-aware styles (unchanged)
 const createStyles = (isDark: boolean) =>
   StyleSheet.create({
     c: {

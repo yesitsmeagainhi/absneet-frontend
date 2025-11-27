@@ -127,7 +127,9 @@
 //     gap: 12,
 //   },
 // };
-// src/screens/Content/McqIntroScreen.tsx 
+
+
+// src/screens/Content/McqIntroScreen.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
@@ -140,79 +142,72 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 
-// 🔹 Static data
-import {
-  SUBJECTS,
-  Subject,
-  Unit,
-  Chapter,
-} from '../../data/demo';
+import { db } from '../../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
-import { useTheme } from '../../theme/ThemeContext';   // ✅ theme
+import { useTheme } from '../../theme/ThemeContext';
 
+// ---------- Types ----------
+type Question = {
+  id: string;
+  q: string;
+  options: string[];
+  correctIndex: number;
+};
+
+type ChapterDoc = {
+  name?: string;
+  questions?: Question[];
+};
+
+// ---------- Component ----------
 export default function McqIntroScreen() {
   const route = useRoute<any>();
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { subjectId, unitId, chapterId } = route.params ?? {};
 
-  const { isDark } = useTheme();                                  // ✅ read theme
-  const styles = useMemo(() => createStyles(isDark), [isDark]);   // ✅ themed styles
+  const { isDark } = useTheme();
+  const styles = useMemo(() => createStyles(isDark), [isDark]);
 
-  const [chapter, setChapter] = useState<Chapter | null>(null);
+  const [chapter, setChapter] = useState<ChapterDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      setLoading(true);
-      setError(null);
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError(null);
 
-      if (!subjectId || !unitId || !chapterId) {
-        setError('Missing chapter selection.');
+        if (!chapterId) {
+          setError('No chapter selected.');
+          setLoading(false);
+          return;
+        }
+
+        // 🔹 Fetch chapter doc from Firestore: nodes/{chapterId}
+        const ref = doc(db, 'nodes', chapterId);
+        const snap = await getDoc(ref);
+
+        if (!snap.exists()) {
+          setError('Chapter not found.');
+          setChapter(null);
+        } else {
+          setChapter(snap.data() as ChapterDoc);
+        }
+      } catch (e: any) {
+        console.error('[McqIntroScreen] load error', e);
+        setError('Failed to load MCQs.');
         setChapter(null);
-        return;
+      } finally {
+        setLoading(false);
       }
+    };
 
-      // 1️⃣ Find subject
-      const subject: Subject | undefined = SUBJECTS.find(
-        s => s.id === subjectId,
-      );
-      if (!subject) {
-        setError('Subject not found in demo data.');
-        setChapter(null);
-        return;
-      }
+    load();
+  }, [chapterId]);
 
-      // 2️⃣ Find unit
-      const unit: Unit | undefined = subject.units.find(
-        u => u.id === unitId,
-      );
-      if (!unit) {
-        setError('Unit not found in demo data.');
-        setChapter(null);
-        return;
-      }
-
-      // 3️⃣ Find chapter
-      const ch: Chapter | undefined = unit.chapters.find(
-        c => c.id === chapterId,
-      );
-      if (!ch) {
-        setError('Chapter not found in demo data.');
-        setChapter(null);
-        return;
-      }
-
-      setChapter(ch);
-    } catch (e: any) {
-      console.error('[McqIntroScreen] error loading from demo.ts', e);
-      setError('Failed to load MCQs.');
-      setChapter(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [subjectId, unitId, chapterId]);
-
+  // ---------- States ----------
   if (loading) {
     return (
       <View style={styles.center}>
@@ -232,6 +227,7 @@ export default function McqIntroScreen() {
 
   const count = chapter?.questions?.length || 0;
 
+  // ---------- UI ----------
   return (
     <View style={styles.screen}>
       <View style={styles.card}>
@@ -274,7 +270,7 @@ export default function McqIntroScreen() {
 }
 
 /**
- * Theme-aware styles – dark by default, flips when isDark=false
+ * Theme-aware styles – dark by default, flips when isDark = false
  */
 const createStyles = (isDark: boolean) =>
   StyleSheet.create({
@@ -283,6 +279,7 @@ const createStyles = (isDark: boolean) =>
       flex: 1,
       backgroundColor: isDark ? '#0F172A' : '#F9FAFB',
       padding: 16,
+      justifyContent: 'center',
     },
 
     // central card

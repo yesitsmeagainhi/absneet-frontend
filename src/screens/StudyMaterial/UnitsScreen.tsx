@@ -30,7 +30,7 @@
 
 
 
-//Firestore inclduedd
+//Firestore included
 // // src/screens/UnitsScreen.tsx
 // import React, { useEffect, useState } from 'react';
 // import {
@@ -167,10 +167,7 @@
 //         alignItems: 'center',
 //         justifyContent: 'center',
 //     },
-// });
-
-
-// src/screens/MCQ/UnitsScreen.tsx  
+// });// src/screens/MCQ/UnitsScreen.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     View,
@@ -182,52 +179,91 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/RootNavigator';
-
-// 🔹 Static data instead of Firestore
-import { SUBJECTS, Unit as DemoUnit, Subject } from '../../data/demo';
-import { useTheme } from '../../theme/ThemeContext'; // ✅ use global theme
+import { useTheme } from '../../theme/ThemeContext';
+import firestore, {
+    FirebaseFirestoreTypes,
+} from '@react-native-firebase/firestore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Units'>;
+
+type UnitDoc = {
+    id: string;
+    type: 'unit';
+    subjectId?: string;
+    parentId?: string;
+    name: string;
+    order?: number;
+    active?: boolean;
+    createdAt?: FirebaseFirestoreTypes.Timestamp | null;
+};
 
 export default function UnitsScreen({ route, navigation }: Props) {
     const { subjectId } = route.params;
 
-    const { isDark } = useTheme();                    // ✅ read theme
-    const styles = useMemo(() => createStyles(isDark), [isDark]); // ✅ themed styles
+    const { isDark } = useTheme();
+    const styles = useMemo(() => createStyles(isDark), [isDark]);
 
-    const [units, setUnits] = useState<DemoUnit[]>([]);
+    const [units, setUnits] = useState<UnitDoc[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const loadUnitsFromDemo = () => {
+        let isMounted = true;
+
+        const loadUnitsFromFirestore = async () => {
+            setLoading(true);
+            setError(null);
+
+            console.log('[UnitsScreen] subjectId from route =', subjectId);
+
             try {
-                setLoading(true);
-                setError(null);
+                const col = firestore().collection('nodes');
 
-                const subject: Subject | undefined = SUBJECTS.find(
-                    s => s.id === subjectId,
-                );
+                // main query
+                const q = col
+                    .where('type', '==', 'unit')
+                    .where('parentId', '==', subjectId)
+                    .orderBy('order', 'asc');
 
-                if (!subject) {
-                    setError('Subject not found in demo data.');
-                    setUnits([]);
-                    return;
-                }
+                console.log('[UnitsScreen] running query for parentId =', subjectId);
+                const snap = await q.get();
 
-                setUnits(subject.units || []);
+                if (!isMounted) return;
+
+                let rows: UnitDoc[] = snap.docs.map(d => {
+                    const data = d.data() as any;
+                    return {
+                        id: d.id,
+                        type: data.type,
+                        subjectId: data.subjectId,
+                        parentId: data.parentId,
+                        name: data.name ?? '(No name)',
+                        order: data.order,
+                        active: data.active,
+                        createdAt: data.createdAt ?? null,
+                    };
+                });
+
+                console.log('[UnitsScreen] fetched units =', rows.length, rows);
+                setUnits(rows);
             } catch (e: any) {
-                console.error('[UnitsScreen] Failed to load units from demo.ts', e);
+                console.error('[UnitsScreen] error loading units', e);
                 setError('Failed to load units. Please try again.');
             } finally {
-                setLoading(false);
+                if (isMounted) {
+                    setLoading(false);
+                }
             }
         };
 
-        loadUnitsFromDemo();
+        loadUnitsFromFirestore();
+
+        return () => {
+            isMounted = false;
+        };
     }, [subjectId]);
 
-    const handlePressUnit = (unit: DemoUnit) => {
+    const handlePressUnit = (unit: UnitDoc) => {
         navigation.navigate('Chapters', {
             subjectId,
             unitId: unit.id,
@@ -255,7 +291,7 @@ export default function UnitsScreen({ route, navigation }: Props) {
         return (
             <View style={styles.center}>
                 <Text style={styles.centerText}>
-                    No units found for this subject in demo data.
+                    No units found for this subject.
                 </Text>
             </View>
         );
@@ -266,7 +302,7 @@ export default function UnitsScreen({ route, navigation }: Props) {
             <FlatList
                 data={units}
                 keyExtractor={u => u.id}
-                contentContainerStyle={{ paddingBottom: 80 }} // extra space so FAB doesn't cover last row
+                contentContainerStyle={{ paddingBottom: 80 }}
                 renderItem={({ item, index }) => (
                     <TouchableOpacity
                         style={styles.row}
@@ -279,7 +315,6 @@ export default function UnitsScreen({ route, navigation }: Props) {
                 )}
             />
 
-            {/* 🔹 Floating Home button (bottom-right) */}
             <TouchableOpacity
                 style={styles.fab}
                 activeOpacity={0.85}
@@ -290,7 +325,6 @@ export default function UnitsScreen({ route, navigation }: Props) {
         </View>
     );
 }
-
 /**
  * Themed styles – dark by default, flip when isDark = false
  */
@@ -342,7 +376,7 @@ const createStyles = (isDark: boolean) =>
         errorText: {
             marginTop: 8,
             fontSize: 13,
-            color: '#F97373', // little brighter red in both themes
+            color: '#F97373',
             textAlign: 'center',
         },
 
