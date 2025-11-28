@@ -1,66 +1,159 @@
 // src/screens/Papers/MockTestPapersScreen.tsx
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Linking,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 
+import { useTheme } from '../../theme/ThemeContext';
+import { db } from '../../firebase';
 import {
-  SUBJECTS,
-  MOCK_FULL_EXAM_PAPERS,
-  MOCK_PDF_PAPERS,
-  type MockPdfPaper,
-  type MockFullExamPdf,
-} from '../../data/demo';
-
-import { useTheme } from '../../theme/ThemeContext'; // ✅ theme hook
+  collection,
+  getDocs,
+  orderBy,
+  query,
+} from 'firebase/firestore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MockTestPapers'>;
+
+type FullExamPdfDoc = {
+  id: string;
+  exam: string;
+  year: number;
+  title: string;
+  pdfUrl: string;
+};
+
+type SubjectMockPdfDoc = {
+  id: string;
+  subjectId: string;
+  subjectName?: string;
+  exam: string;
+  year: number;
+  title: string;
+  pdfUrl: string;
+};
 
 type SubjectWithMockPapers = {
   subjectId: string;
   subjectName: string;
-  papers: MockPdfPaper[];
+  papers: SubjectMockPdfDoc[];
 };
 
-export default function MockTestPapersScreen({ }: Props) {
+const fullExamCol = collection(db, 'mock_full_exam_papers');      // 👈 adjust name if needed
+const subjectMocksCol = collection(db, 'mock_subject_mock_papers'); // 👈 adjust name if needed
+
+export default function MockTestPapersScreen({ navigation }: Props) {
   const { isDark } = useTheme();
-  const styles = useMemo(() => createStyles(isDark), [isDark]); // ✅ themed styles
+  const styles = useMemo(() => createStyles(isDark), [isDark]);
 
-  // 🟢 Full mock exam papers (all subjects combined) – sorted latest first
-  const fullExamPapers: MockFullExamPdf[] = useMemo(
-    () => [...MOCK_FULL_EXAM_PAPERS].sort((a, b) => b.year - a.year),
-    [],
-  );
+  const [fullExamPapers, setFullExamPapers] = useState<FullExamPdfDoc[]>([]);
+  const [groupedSubjectMocks, setGroupedSubjectMocks] = useState<SubjectWithMockPapers[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // 🟡 Subject-wise mock PDFs – grouped by subject
-  const groupedSubjectMocks: SubjectWithMockPapers[] = useMemo(() => {
-    const bySub: Record<string, SubjectWithMockPapers> = {};
+  const loadPapers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-    MOCK_PDF_PAPERS.forEach((p) => {
-      if (!bySub[p.subjectId]) {
-        const subj = SUBJECTS.find((s) => s.id === p.subjectId);
-        bySub[p.subjectId] = {
-          subjectId: p.subjectId,
-          subjectName: subj?.name || p.subjectId.toUpperCase(),
-          papers: [],
+      // 🔹 1. Load full exam mock papers
+      const fullQ = query(fullExamCol, orderBy('year', 'desc'));
+      const fullSnap = await getDocs(fullQ);
+
+      const fullList: FullExamPdfDoc[] = fullSnap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          id: d.id,
+          exam: data.exam ?? 'NEET',
+          year: data.year ?? 0,
+          title: data.title ?? `${data.exam ?? 'NEET'} ${data.year ?? ''} Mock Test`,
+          pdfUrl: data.pdfUrl ?? '',
         };
-      }
-      bySub[p.subjectId].papers.push(p);
-    });
+      });
 
-    return Object.values(bySub).map((s) => ({
-      ...s,
-      papers: s.papers.sort((a, b) => b.year - a.year),
-    }));
+      setFullExamPapers(fullList);
+
+      // 🔹 2. Load subject-wise mock papers
+      const subjQ = query(subjectMocksCol, orderBy('year', 'desc'));
+      const subjSnap = await getDocs(subjQ);
+
+      const subjectDocs: SubjectMockPdfDoc[] = subjSnap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          id: d.id,
+          subjectId: data.subjectId ?? 'general',
+          subjectName: data.subjectName,
+          exam: data.exam ?? 'NEET',
+          year: data.year ?? 0,
+          title: data.title ?? `${data.exam ?? 'NEET'} ${data.year ?? ''} Mock`,
+          pdfUrl: data.pdfUrl ?? '',
+        };
+      });
+
+      // group by subjectId
+      const bySub: Record<string, SubjectWithMockPapers> = {};
+
+      subjectDocs.forEach(p => {
+        if (!bySub[p.subjectId]) {
+          bySub[p.subjectId] = {
+            subjectId: p.subjectId,
+            subjectName: p.subjectName || p.subjectId.toUpperCase(),
+            papers: [],
+          };
+        }
+        bySub[p.subjectId].papers.push(p);
+      });
+
+      const grouped = Object.values(bySub).map(s => ({
+        ...s,
+        papers: [...s.papers].sort((a, b) => b.year - a.year),
+      }));
+
+      setGroupedSubjectMocks(grouped);
+    } catch (e: any) {
+      console.error('[MockTestPapersScreen] load error', e);
+      setError('Failed to load mock test papers.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPapers();
   }, []);
+
+  const openPdf = (title: string, pdfUrl: string) => {
+    if (!pdfUrl) return;
+    navigation.navigate('PDFViewer', {
+      title,
+      url: pdfUrl,
+    });
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.centerWrap}>
+        <ActivityIndicator color={isDark ? '#E5E7EB' : '#4B5563'} />
+        <Text style={styles.centerText}>Loading mock test papers…</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centerWrap}>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.c}>
@@ -89,7 +182,7 @@ export default function MockTestPapersScreen({ }: Props) {
             <TouchableOpacity
               key={paper.id}
               style={styles.paperRow}
-              onPress={() => Linking.openURL(paper.pdfUrl)}
+              onPress={() => openPdf(paper.title, paper.pdfUrl)}
               activeOpacity={0.7}
             >
               <View style={{ flex: 1 }}>
@@ -132,7 +225,7 @@ export default function MockTestPapersScreen({ }: Props) {
                   <TouchableOpacity
                     key={paper.id}
                     style={styles.paperRow}
-                    onPress={() => Linking.openURL(paper.pdfUrl)}
+                    onPress={() => openPdf(paper.title, paper.pdfUrl)}
                     activeOpacity={0.7}
                   >
                     <View style={{ flex: 1 }}>
@@ -160,6 +253,24 @@ const createStyles = (isDark: boolean) =>
       flex: 1,
       padding: 16,
       backgroundColor: isDark ? '#020617' : '#F9FAFB',
+    },
+    centerWrap: {
+      flex: 1,
+      padding: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? '#020617' : '#F9FAFB',
+    },
+    centerText: {
+      marginTop: 8,
+      fontSize: 13,
+      color: isDark ? '#E5E7EB' : '#6B7280',
+      textAlign: 'center',
+    },
+    errorText: {
+      fontSize: 14,
+      color: '#F97373',
+      textAlign: 'center',
     },
     heading: {
       fontSize: 18,

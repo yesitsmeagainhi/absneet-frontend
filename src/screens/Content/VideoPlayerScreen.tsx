@@ -1,9 +1,12 @@
 // src/screens/Content/VideoPlayerScreen.tsx
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/RootNavigator';
 import { WebView } from 'react-native-webview';
+
+import { RootStackParamList } from '../../navigation/RootNavigator';
+// 🔥 React-Native-Firebase Firestore instance
+import { db } from '../../services/firebase.native';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'VideoPlayer'>;
 
@@ -15,9 +18,7 @@ function getDriveId(input?: string | null): string {
         let s = input.trim();
         if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
 
-        // 👇 TS workaround: treat URL instance as any
         const u: any = new (URL as any)(s);
-
         const m = u.pathname.match(/\/file\/d\/([^/]+)/);
         return (m && m[1]) || u.searchParams.get('id') || '';
     } catch {
@@ -55,7 +56,6 @@ function toPlayable(raw?: string | null): Playable {
     if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
 
     try {
-        // 👇 TS workaround: cast URL to any
         const u: any = new (URL as any)(s);
         const host = (u.hostname || '').toLowerCase();
 
@@ -141,20 +141,168 @@ function htmlVideo(src: string): string {
 // ── component ───────────────────────────────────────────────────────
 
 export default function VideoPlayerScreen({ route }: Props) {
-    const { url } = route.params;
+    /**
+     * Params:
+     * - url       → optional direct URL (old behaviour)
+     * - chapterId → Firestore `nodes` doc id for the chapter
+     * - videoId   → optional id inside chapter.videos[] to pick specific video
+     */
+    const { url: initialUrl, chapterId, videoId, title: initialTitle } = route.params as any;
 
-    const playable = useMemo(() => toPlayable(url), [url]);
+    if (__DEV__) {
+        console.log('[VideoPlayer] route params =', route.params);
+    }
 
-    if (!url) {
+    const [resolvedUrl, setResolvedUrl] = useState<string | null>(initialUrl ?? null);
+    const [videoTitle, setVideoTitle] = useState<string>(initialTitle ?? '');
+    const [metaLoading, setMetaLoading] = useState<boolean>(!initialUrl && !!chapterId);
+    const [metaError, setMetaError] = useState<string | null>(null);
+
+    // 🔥 Fetch video URL from Firestore when only chapterId/videoId is provided
+    useEffect(() => {
+        const fetchFromChapter = async () => {
+            if (initialUrl || !chapterId) {
+                if (__DEV__) {
+                    console.log(
+                        '[VideoPlayer] Skipping Firestore fetch. initialUrl =',
+                        initialUrl,
+                        'chapterId =',
+                        chapterId,
+                    );
+                }
+                return;
+            }
+
+            try {
+                setMetaLoading(true);
+                setMetaError(null);
+
+                if (__DEV__) {
+                    console.log('[VideoPlayer] Fetching chapter doc from Firestore. chapterId =', chapterId);
+                }
+
+                const snap = await db.collection('nodes').doc(chapterId).get();
+
+                if (!snap.exists) {
+                    if (__DEV__) {
+                        console.log('[VideoPlayer] Chapter doc does NOT exist for id:', chapterId);
+                    }
+                    setMetaError('Chapter not found in cloud.');
+                    return;
+                }
+
+                const data = snap.data() as any;
+                if (__DEV__) {
+                    console.log('[VideoPlayer] Chapter doc data =', data);
+                }
+
+                const videos =
+                    (data?.videos ?? []) as Array<{ id?: string; title?: string; url?: string }>;
+
+                if (__DEV__) {
+                    console.log('[VideoPlayer] videos array length =', videos.length, 'videos =', videos);
+                }
+
+                if (!videos.length) {
+                    setMetaError('No videos attached to this chapter.');
+                    return;
+                }
+
+                // If videoId is given, pick that; else first
+                const chosen =
+                    (videoId && videos.find(v => v.id === videoId)) ||
+                    videos[0];
+
+                if (__DEV__) {
+                    console.log('[VideoPlayer] videoId param =', videoId, 'chosen video =', chosen);
+                }
+
+                if (!chosen?.url) {
+                    setMetaError('This video has no URL.');
+                    return;
+                }
+
+                setResolvedUrl(chosen.url);
+                if (!videoTitle && chosen.title) {
+                    setVideoTitle(chosen.title);
+                }
+            } catch (err) {
+                console.error('[VideoPlayer] Failed to load chapter video', err);
+                setMetaError('Failed to load video details from cloud.');
+            } finally {
+                setMetaLoading(false);
+            }
+        };
+
+        fetchFromChapter();
+    }, [initialUrl, chapterId, videoId, videoTitle]);
+
+    useEffect(() => {
+        if (__DEV__) {
+            console.log('[VideoPlayer] resolvedUrl =', resolvedUrl);
+            console.log('[VideoPlayer] metaError =', metaError);
+        }
+    }, [resolvedUrl, metaError]);
+
+    // While we’re still figuring out which URL to play
+    if (metaLoading) {
         return (
-            <View style={styles.errorContainer}>
-                <Text style={{ color: '#fff' }}>No video URL provided.</Text>
+            <View style={styles.loader}>
+                <ActivityIndicator size="large" color="#ffffff" />
+                <Text style={{ marginTop: 8, color: '#fff' }}>Loading video…</Text>
+                {__DEV__ && (
+                    <Text style={styles.debugText}>
+                        (chapterId: {chapterId || 'none'}, videoId: {videoId || 'none'})
+                    </Text>
+                )}
             </View>
         );
     }
 
+    if (!resolvedUrl && metaError) {
+        return (
+            <View style={styles.errorContainer}>
+                <Text style={{ color: '#fff', textAlign: 'center', paddingHorizontal: 16 }}>
+                    {metaError}
+                </Text>
+                {__DEV__ && (
+                    <Text style={styles.debugText}>
+                        chapterId: {chapterId || 'none'}
+                        {'\n'}
+                        videoId: {videoId || 'none'}
+                    </Text>
+                )}
+            </View>
+        );
+    }
+
+    if (!resolvedUrl) {
+        return (
+            <View style={styles.errorContainer}>
+                <Text style={{ color: '#fff' }}>No video URL available.</Text>
+                {__DEV__ && (
+                    <Text style={styles.debugText}>
+                        (No URL & no metaError. chapterId: {chapterId || 'none'}, videoId:{' '}
+                        {videoId || 'none'})
+                    </Text>
+                )}
+            </View>
+        );
+    }
+
+    const playable = useMemo(() => toPlayable(resolvedUrl), [resolvedUrl]);
+
     return (
         <View style={styles.container}>
+            {/* Optional: show title if available */}
+            {!!videoTitle && (
+                <View style={styles.titleBar}>
+                    <Text style={styles.titleText} numberOfLines={1}>
+                        {videoTitle}
+                    </Text>
+                </View>
+            )}
+
             {playable.mode === 'yt' && (
                 <WebView
                     source={{ html: htmlIframe(playable.url), baseUrl: playable.baseUrl }}
@@ -205,6 +353,13 @@ export default function VideoPlayerScreen({ route }: Props) {
             {playable.mode === 'unknown' && (
                 <View style={styles.errorContainer}>
                     <Text style={{ color: '#fff' }}>Unable to play this video link.</Text>
+                    {__DEV__ && (
+                        <Text style={styles.debugText}>
+                            final url: {resolvedUrl}
+                            {'\n'}
+                            mode: unknown
+                        </Text>
+                    )}
                 </View>
             )}
         </View>
@@ -217,11 +372,28 @@ const styles = StyleSheet.create({
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
+        backgroundColor: '#000',
     },
     errorContainer: {
         flex: 1,
         backgroundColor: '#000',
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    titleBar: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        backgroundColor: '#111',
+    },
+    titleText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    debugText: {
+        marginTop: 8,
+        color: '#9CA3AF',
+        fontSize: 11,
+        textAlign: 'center',
     },
 });

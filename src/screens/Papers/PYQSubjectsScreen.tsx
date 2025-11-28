@@ -227,7 +227,7 @@ export default function PYQSubjectsScreen({ navigation }: Props) {
                 setError(null);
 
                 const snap = await firestore()
-                    .collection('pyqMcqPapers')
+                    .collection('nodes')
                     .orderBy('year', 'desc') // latest papers first
                     .get();
 

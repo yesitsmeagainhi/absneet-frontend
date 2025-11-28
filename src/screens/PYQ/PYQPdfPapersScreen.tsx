@@ -153,8 +153,6 @@
 //       marginLeft: 10,
 //     },
 //   });
-
-
 // src/screens/PYQ/PYQPdfPapersScreen.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -162,7 +160,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Linking,
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
@@ -188,9 +185,9 @@ type FullExamPdfDoc = {
   pdfUrl: string;
 };
 
-const col = collection(db, 'pyqFullExamPapers');
+const col = collection(db, 'nodes');
 
-export default function PYQPdfPapersScreen({ }: Props) {
+export default function PYQPdfPapersScreen({ navigation }: Props) {
   const { isDark } = useTheme();
   const styles = useMemo(() => createStyles(isDark), [isDark]);
 
@@ -230,9 +227,13 @@ export default function PYQPdfPapersScreen({ }: Props) {
     loadPapers();
   }, []);
 
-  const handleOpenPdf = (url: string) => {
-    if (!url) return;
-    Linking.openURL(url);
+  // ✅ Navigate to in-app PDFViewer instead of opening browser
+  const handleOpenPdf = (paper: FullExamPdfDoc) => {
+    if (!paper.pdfUrl) return;
+    navigation.navigate('PDFViewer', {
+      title: paper.title,
+      url: paper.pdfUrl,
+    });
   };
 
   if (loading) {
@@ -279,7 +280,7 @@ export default function PYQPdfPapersScreen({ }: Props) {
               <TouchableOpacity
                 key={paper.id}
                 style={styles.paperRow}
-                onPress={() => handleOpenPdf(paper.pdfUrl)}
+                onPress={() => handleOpenPdf(paper)}
                 activeOpacity={0.7}
               >
                 <View style={{ flex: 1 }}>

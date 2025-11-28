@@ -499,8 +499,7 @@
 //       fontSize: 11,
 //       color: isDark ? '#9CA3AF' : '#6B7280',
 //       marginTop: 6,
-//     },
-//   });// src/screens/Home/HomeScreen.tsx
+//     },// src/screens/Home/HomeScreen.tsx
 import React, {
   useMemo,
   useCallback,
@@ -522,12 +521,12 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// 🔹 Firestore (RN Firebase) – make sure this path matches your project
+// 🔹 Firestore (React Native Firebase)
 import { db } from '../../services/firebase.native';
 
 import { RootStackParamList } from '../../navigation/rootnavigator';
 import { useTheme } from '../../theme/ThemeContext';
-import { SUBJECTS, Subject } from '../../data/demo';
+import { SUBJECTS } from '../../data/demo';
 
 // Curved arrow asset
 const ArrowWaveUp = require('../../assets/intro/arrow_wave_up.png');
@@ -603,12 +602,21 @@ const INTRO_STEPS = [
 
 type IntroStepId = (typeof INTRO_STEPS)[number]['id'];
 
+type SubjectItem = {
+  id: string;
+  name: string;
+  order: number;
+  slug?: string;
+  active?: boolean;
+  unitCount: number;
+};
+
 export default function HomeScreen() {
   const nav = useNavigation<Nav>();
   const { isDark, toggleTheme } = useTheme();
 
-  // 🔹 Subjects from Firestore (fallback to demo)
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  // 🔹 Subjects from Firestore (with unit count)
+  const [subjects, setSubjects] = useState<SubjectItem[]>([]);
   const [subjectsLoading, setSubjectsLoading] = useState(true);
   const [subjectsError, setSubjectsError] = useState<string | null>(null);
 
@@ -632,42 +640,79 @@ export default function HomeScreen() {
   const [showIntro, setShowIntro] = useState(true);
   const [introStep, setIntroStep] = useState(0); // index in INTRO_STEPS
 
-  // 🔥 Load subjects from Firestore
+  // 🔥 Load subjects + unit counts from Firestore
   useEffect(() => {
     const loadSubjects = async () => {
       try {
         setSubjectsLoading(true);
         setSubjectsError(null);
 
-        console.log('[HOME] loading subjects from Firestore...');
+        console.log('[HOME] loading subjects and units from Firestore...');
 
-        const snap = await db
-          .collection('nodes')
+        const nodesRef = db.collection('nodes');
+
+        // 1️⃣ subjects
+        const subjectsSnap = await nodesRef
           .where('type', '==', 'subject')
           .orderBy('order', 'asc')
           .get();
 
-        if (snap.empty) {
+        // 2️⃣ units
+        const unitsSnap = await nodesRef
+          .where('type', '==', 'unit')
+          .get();
+
+        // 3️⃣ subjectId -> unitCount
+        const unitCounts: Record<string, number> = {};
+        unitsSnap.forEach(docSnap => {
+          const data = docSnap.data() as any;
+          const parentId = data.parentId as string | undefined;
+          if (!parentId) return;
+          unitCounts[parentId] = (unitCounts[parentId] ?? 0) + 1;
+        });
+
+        if (subjectsSnap.empty) {
           console.log('[HOME] no Firestore subjects, using demo SUBJECTS');
-          setSubjects(SUBJECTS);
+
+          const demoSubjects: SubjectItem[] = SUBJECTS.map((s, idx) => ({
+            id: s.id,
+            name: s.name,
+            order: idx,
+            unitCount: s.units?.length ?? 0,
+          }));
+
+          setSubjects(demoSubjects);
         } else {
-          const items: Subject[] = snap.docs.map(doc => {
-            const data = doc.data() as any;
+          const items: SubjectItem[] = subjectsSnap.docs.map(docSnap => {
+            const data = docSnap.data() as any;
+            const id = docSnap.id;
             return {
-              id: doc.id,
+              id,
               name: data.name ?? data.title ?? 'Untitled subject',
-              // If you store units/chapters in Firestore, map them here.
-              // For now we just ensure units is an array to satisfy type.
-              units: data.units ?? [],
-            } as Subject;
+              order: data.order ?? 0,
+              slug: data.slug,
+              active: data.active ?? true,
+              unitCount: unitCounts[id] ?? 0,
+            };
           });
+
           setSubjects(items);
           console.log('[HOME] subjects loaded:', items.length);
         }
       } catch (err) {
-        console.warn('[HOME] Failed to load subjects from Firestore, using demo data', err);
+        console.warn(
+          '[HOME] Failed to load subjects from Firestore, using demo data',
+          err,
+        );
         setSubjectsError('Failed to load subjects from cloud. Showing demo data.');
-        setSubjects(SUBJECTS);
+
+        const demoSubjects: SubjectItem[] = SUBJECTS.map((s, idx) => ({
+          id: s.id,
+          name: s.name,
+          order: idx,
+          unitCount: s.units?.length ?? 0,
+        }));
+        setSubjects(demoSubjects);
       } finally {
         setSubjectsLoading(false);
       }
@@ -749,9 +794,8 @@ export default function HomeScreen() {
       case 'subjects':
         if (!anchors.subjectsY) return undefined;
         return {
-          // tip card just BELOW the subjects section
           wrapper: { left: 16, right: 16, top: anchors.subjectsY + 8 },
-          arrowOnTop: true,  // arrow points UP to the subjects row
+          arrowOnTop: true,
           arrowOnBottom: false,
           arrowAlign: 'center' as const,
         };
@@ -762,14 +806,14 @@ export default function HomeScreen() {
 
         const desiredTop =
           targetY - (TIP_CARD_HEIGHT + WAVE_ARROW_HEIGHT + 16);
-        const minTop = anchors.subjectsY - 50; // don't go too close to subjects
+        const minTop = anchors.subjectsY - 50;
         const safeTop = Math.max(desiredTop, minTop);
 
         return {
           wrapper: { left: 16, right: 16, top: safeTop },
           arrowOnTop: true,
           arrowOnBottom: false,
-          arrowAlign: 'flex-start' as const, // left cards
+          arrowAlign: 'flex-start' as const,
         };
       }
 
@@ -784,15 +828,14 @@ export default function HomeScreen() {
           wrapper: { left: 16, right: 16, top: safeTop },
           arrowOnTop: true,
           arrowOnBottom: false,
-          arrowAlign: 'flex-end' as const, // right cards
+          arrowAlign: 'flex-end' as const,
         };
       }
 
       case 'pyq_pdf': {
         if (!anchors.practiceY || !anchors.subjectsY) return undefined;
 
-        const desiredTop =
-          anchors.practiceY - TIP_CARD_HEIGHT - 406;
+        const desiredTop = anchors.practiceY - TIP_CARD_HEIGHT - 406;
         const minTop = anchors.subjectsY + 60;
         const safeTop = Math.max(desiredTop, minTop);
 
@@ -807,8 +850,7 @@ export default function HomeScreen() {
       case 'mock_tests': {
         if (!anchors.practiceY || !anchors.subjectsY) return undefined;
 
-        const desiredTop =
-          anchors.practiceY - TIP_CARD_HEIGHT - 106;
+        const desiredTop = anchors.practiceY - TIP_CARD_HEIGHT - 106;
         const minTop = anchors.subjectsY + 40;
         const safeTop = Math.max(desiredTop, minTop);
 
@@ -823,7 +865,6 @@ export default function HomeScreen() {
       case 'banners_theme':
         if (!anchors.topAreaY) return undefined;
         return {
-          // card just below the top area, arrow up to banners/theme toggle
           wrapper: { left: 16, right: 16, top: anchors.topAreaY + 8 },
           arrowOnTop: true,
           arrowOnBottom: false,
@@ -842,7 +883,7 @@ export default function HomeScreen() {
           style={styles.screen}
           contentContainerStyle={styles.c}
           showsVerticalScrollIndicator={false}
-          scrollEnabled={!showIntro} // freeze scroll while tips visible
+          scrollEnabled={!showIntro}
         >
           {/* Top app bar + banners (measured for topAreaY) */}
           <View
@@ -953,8 +994,9 @@ export default function HomeScreen() {
                   >
                     <Text style={styles.subjectTitle}>{item.name}</Text>
                     <Text style={styles.subjectMeta}>
-                      {item.units?.length ?? 0} units
+                      {item.unitCount} {item.unitCount === 1 ? 'unit' : 'units'}
                     </Text>
+
                   </Pressable>
                 )}
               />
@@ -979,7 +1021,6 @@ export default function HomeScreen() {
               <Pressable
                 onLayout={e => {
                   const { y, height } = e.nativeEvent.layout;
-                  // store vertical center of this card
                   setAnchors(prev => ({ ...prev, customMcqY: y + height / 2 }));
                 }}
                 style={({ pressed }) => [
@@ -1074,7 +1115,7 @@ export default function HomeScreen() {
               ]}
               pointerEvents="box-none"
             >
-              {/* Arrow TOP (card below, arrow pointing up to block above) */}
+              {/* Arrow TOP */}
               {introPos.arrowOnTop && (
                 <View
                   style={[
@@ -1126,7 +1167,7 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              {/* Arrow BOTTOM (card above, arrow pointing down to block below) */}
+              {/* Arrow BOTTOM */}
               {introPos.arrowOnBottom && (
                 <View
                   style={[
@@ -1144,11 +1185,338 @@ export default function HomeScreen() {
             </View>
           </View>
         )}
-
       </View>
     </SafeAreaView>
   );
 }
+
+/* ---------- Styles ---------- */
+
+// const createStyles = (isDark: boolean) =>
+//   StyleSheet.create({
+//     safeArea: {
+//       flex: 1,
+//       backgroundColor: isDark ? '#020617' : '#F9FAFB',
+//     },
+//     root: {
+//       flex: 1,
+//     },
+//     screen: {
+//       flex: 1,
+//     },
+//     c: {
+//       paddingHorizontal: 16,
+//       paddingBottom: 24,
+//     },
+
+//     /* Top bar & banners */
+//     topBar: {
+//       flexDirection: 'row',
+//       justifyContent: 'space-between',
+//       alignItems: 'center',
+//       paddingVertical: 12,
+//     },
+//     appTitle: {
+//       fontSize: 20,
+//       fontWeight: '700',
+//       color: isDark ? '#F9FAFB' : '#111827',
+//     },
+//     appSubtitle: {
+//       fontSize: 12,
+//       color: isDark ? '#9CA3AF' : '#6B7280',
+//       marginTop: 2,
+//     },
+//     topRightRow: {
+//       flexDirection: 'row',
+//       alignItems: 'center',
+//       gap: 8,
+//     },
+//     themeToggle: {
+//       paddingHorizontal: 10,
+//       paddingVertical: 6,
+//       borderRadius: 999,
+//       borderWidth: 1,
+//       borderColor: isDark ? '#4B5563' : '#E5E7EB',
+//       marginRight: 8,
+//     },
+//     themeToggleText: {
+//       fontSize: 11,
+//       fontWeight: '600',
+//       color: isDark ? '#E5E7EB' : '#111827',
+//     },
+//     neetBadge: {
+//       backgroundColor: isDark ? '#22C55E33' : '#DCFCE7',
+//       paddingHorizontal: 10,
+//       paddingVertical: 6,
+//       borderRadius: 999,
+//     },
+//     neetBadgeText: {
+//       fontSize: 11,
+//       fontWeight: '600',
+//       color: isDark ? '#4ADE80' : '#166534',
+//     },
+
+//     bannerWrap: {
+//       marginTop: 4,
+//       marginBottom: 12,
+//     },
+//     bannerScroll: {
+//       paddingVertical: 4,
+//     },
+//     bannerCard: {
+//       width: 260,
+//       height: 120,
+//       borderRadius: 16,
+//       overflow: 'hidden',
+//       marginRight: 12,
+//       backgroundColor: isDark ? '#020617' : '#E5E7EB',
+//     },
+//     bannerCardPressed: {
+//       opacity: 0.8,
+//     },
+//     bannerImage: {
+//       width: '100%',
+//       height: '100%',
+//     },
+
+//     /* Sections */
+//     sectionHeaderRow: {
+//       flexDirection: 'row',
+//       justifyContent: 'space-between',
+//       alignItems: 'center',
+//       marginTop: 8,
+//       marginBottom: 4,
+//     },
+//     sectionTitle: {
+//       fontSize: 16,
+//       fontWeight: '600',
+//       color: isDark ? '#F9FAFB' : '#111827',
+//     },
+//     sectionMeta: {
+//       fontSize: 12,
+//       color: isDark ? '#9CA3AF' : '#6B7280',
+//     },
+//     errorText: {
+//       fontSize: 13,
+//       color: '#F97373',
+//       marginBottom: 4,
+//     },
+
+//     empty: {
+//       paddingVertical: 18,
+//       alignItems: 'center',
+//       justifyContent: 'center',
+//     },
+//     emptyTitle: {
+//       fontSize: 14,
+//       fontWeight: '600',
+//       color: isDark ? '#E5E7EB' : '#111827',
+//       marginBottom: 4,
+//     },
+//     emptySubtitle: {
+//       fontSize: 12,
+//       color: isDark ? '#9CA3AF' : '#6B7280',
+//       textAlign: 'center',
+//     },
+//     emptyHighlight: {
+//       fontWeight: '700',
+//       color: isDark ? '#E5E7EB' : '#111827',
+//     },
+
+//     /* Subjects */
+//     subjectCard: {
+//       paddingVertical: 10,
+//       paddingHorizontal: 12,
+//       borderRadius: 12,
+//       borderWidth: 1,
+//       borderColor: isDark ? '#1F2937' : '#E5E7EB',
+//       backgroundColor: isDark ? '#020617' : '#FFFFFF',
+//       marginRight: 10,
+//       minWidth: 130,
+//     },
+//     subjectCardPressed: {
+//       opacity: 0.85,
+//     },
+//     subjectTitle: {
+//       fontSize: 14,
+//       fontWeight: '600',
+//       color: isDark ? '#E5E7EB' : '#111827',
+//       marginBottom: 4,
+//     },
+//     subjectMeta: {
+//       fontSize: 12,
+//       color: isDark ? '#9CA3AF' : '#6B7280',
+//     },
+
+//     /* Practice cards */
+//     cardGrid: {
+//       marginTop: 8,
+//       flexDirection: 'row',
+//       flexWrap: 'wrap',
+//       justifyContent: 'space-between',
+//     },
+//     modeCard: {
+//       width: '48%',
+//       marginBottom: 12,
+//       padding: 12,
+//       borderRadius: 14,
+//       borderWidth: 1,
+//       borderColor: isDark ? '#1F2937' : '#E5E7EB',
+//       backgroundColor: isDark ? '#020617' : '#FFFFFF',
+//     },
+//     modeCardDisabled: {
+//       opacity: 0.5,
+//     },
+//     modeCardPrimary: {
+//       backgroundColor: isDark ? '#0F172A' : '#EEF2FF',
+//       borderColor: isDark ? '#4F46E5' : '#6366F1',
+//     },
+//     modeCardPrimaryPressed: {
+//       opacity: 0.9,
+//     },
+//     modeCardAccent: {
+//       backgroundColor: isDark ? '#022C22' : '#ECFDF5',
+//       borderColor: isDark ? '#059669' : '#10B981',
+//     },
+//     modeCardAccentPressed: {
+//       opacity: 0.9,
+//     },
+//     modeCardNeutral: {
+//       backgroundColor: isDark ? '#020617' : '#F9FAFB',
+//     },
+//     modeCardNeutralPressed: {
+//       opacity: 0.9,
+//     },
+//     modeEmoji: {
+//       fontSize: 22,
+//       marginBottom: 6,
+//     },
+//     modeTitlePrimary: {
+//       fontSize: 14,
+//       fontWeight: '700',
+//       color: isDark ? '#E5E7EB' : '#111827',
+//       marginBottom: 4,
+//     },
+//     modeTextPrimary: {
+//       fontSize: 12,
+//       color: isDark ? '#CBD5F5' : '#4B5563',
+//     },
+//     modeHintPrimary: {
+//       fontSize: 11,
+//       marginTop: 6,
+//       color: isDark ? '#A5B4FC' : '#4F46E5',
+//     },
+//     modeTitle: {
+//       fontSize: 14,
+//       fontWeight: '700',
+//       color: isDark ? '#E5E7EB' : '#111827',
+//       marginBottom: 4,
+//     },
+//     modeText: {
+//       fontSize: 12,
+//       color: isDark ? '#9CA3AF' : '#4B5563',
+//     },
+//     modeHint: {
+//       fontSize: 11,
+//       marginTop: 6,
+//       color: isDark ? '#E5E7EB' : '#6B7280',
+//     },
+
+//     /* Intro overlay */
+//     introOverlay: {
+//       ...StyleSheet.absoluteFillObject,
+//       justifyContent: 'flex-start',
+//     },
+//     introDim: {
+//       ...StyleSheet.absoluteFillObject,
+//       backgroundColor: 'rgba(15,23,42,0.6)',
+//     },
+//     introCardWrapper: {
+//       position: 'absolute',
+//     },
+//     arrowRow: {
+//       width: '100%',
+//       marginBottom: 2,
+//     },
+//     waveArrowImageTop: {
+//       width: 80,
+//       height: 80,
+//       resizeMode: 'contain',
+//     },
+//     waveArrowImageBottom: {
+//       width: 80,
+//       height: 80,
+//       resizeMode: 'contain',
+//       transform: [{ rotate: '180deg' }],
+//     },
+//     introCard: {
+//       borderRadius: 16,
+//       padding: 14,
+//       backgroundColor: isDark ? '#020617' : '#FFFFFF',
+//       borderWidth: 1,
+//       borderColor: isDark ? '#1F2937' : '#E5E7EB',
+//     },
+//     introHeaderRow: {
+//       flexDirection: 'row',
+//       alignItems: 'center',
+//       marginBottom: 6,
+//       gap: 8,
+//     },
+//     introStepBadge: {
+//       fontSize: 11,
+//       fontWeight: '700',
+//       paddingHorizontal: 8,
+//       paddingVertical: 2,
+//       borderRadius: 999,
+//       backgroundColor: isDark ? '#111827' : '#EEF2FF',
+//       color: isDark ? '#E5E7EB' : '#4F46E5',
+//     },
+//     introTitle: {
+//       fontSize: 14,
+//       fontWeight: '700',
+//       color: isDark ? '#F9FAFB' : '#111827',
+//       flex: 1,
+//     },
+//     introText: {
+//       fontSize: 12,
+//       color: isDark ? '#E5E7EB' : '#4B5563',
+//       marginBottom: 10,
+//     },
+//     introButtonsRow: {
+//       flexDirection: 'row',
+//       justifyContent: 'flex-end',
+//       gap: 8,
+//     },
+//     introSecondaryBtn: {
+//       paddingHorizontal: 12,
+//       paddingVertical: 6,
+//       borderRadius: 999,
+//       borderWidth: 1,
+//       borderColor: isDark ? '#4B5563' : '#D1D5DB',
+//       backgroundColor: 'transparent',
+//     },
+//     introSecondaryBtnPressed: {
+//       opacity: 0.8,
+//     },
+//     introSecondaryText: {
+//       fontSize: 12,
+//       color: isDark ? '#E5E7EB' : '#374151',
+//     },
+//     introPrimaryBtn: {
+//       paddingHorizontal: 14,
+//       paddingVertical: 6,
+//       borderRadius: 999,
+//       backgroundColor: isDark ? '#4F46E5' : '#2563EB',
+//     },
+//     introPrimaryBtnPressed: {
+//       opacity: 0.9,
+//     },
+//     introPrimaryText: {
+//       fontSize: 12,
+//       fontWeight: '600',
+//       color: '#FFFFFF',
+//     },
+//   });
 
 /** 🎨 Themed styles – dark & light with safe area */
 const createStyles = (isDark: boolean) =>

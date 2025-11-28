@@ -141,8 +141,7 @@
 //         alignItems: 'center' as const,
 //         justifyContent: 'center' as const,
 //     },
-// };
-// src/screens/Content/VideosScreen.tsx
+// };// src/screens/Content/VideosScreen.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
@@ -154,91 +153,116 @@ import {
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import firestore, {
+  FirebaseFirestoreTypes,
+} from '@react-native-firebase/firestore';
 
 import { RootStackParamList } from '../../navigation/RootNavigator';
-
-// 🔹 Static data instead of Firestore
-import {
-  SUBJECTS,
-  Subject,
-  Unit,
-  Chapter,
-} from '../../data/demo';
-
-import { useTheme } from '../../theme/ThemeContext';   // ✅ theme hook
+import { useTheme } from '../../theme/ThemeContext';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-type DemoVideo = {
+type FirestoreVideo = {
   id: string;
   title: string;
   url: string;
   provider?: 'youtube' | 'drive' | 'other';
 };
 
+type ChapterDoc = {
+  type: 'chapter';
+  name?: string;
+  subjectId: string;
+  unitId: string;
+  videos?: FirestoreVideo[];
+};
+
 export default function VideosScreen() {
   const route = useRoute<any>();
+  const navigation = useNavigation<Nav>();
   const { subjectId, unitId, chapterId } = route.params ?? {};
 
-  const navigation = useNavigation<Nav>();
+  const { isDark } = useTheme();
+  const styles = useMemo(() => createStyles(isDark), [isDark]);
 
-  const { isDark } = useTheme();                                  // ✅ read theme
-  const styles = useMemo(() => createStyles(isDark), [isDark]);   // ✅ themed styles
-
-  const [chapter, setChapter] = useState<Chapter | null>(null);
+  const [chapterName, setChapterName] = useState<string>('Chapter Videos');
+  const [videos, setVideos] = useState<FirestoreVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 🔥 Load chapter + videos from Firestore
   useEffect(() => {
-    try {
-      setLoading(true);
-      setError(null);
+    const load = async () => {
+      console.log('[VideosScreen] route params =', {
+        subjectId,
+        unitId,
+        chapterId,
+      });
 
       if (!subjectId || !unitId || !chapterId) {
         setError('Missing chapter selection.');
-        setChapter(null);
+        setLoading(false);
         return;
       }
 
-      // 1️⃣ Find subject
-      const subject: Subject | undefined = SUBJECTS.find(
-        s => s.id === subjectId,
-      );
-      if (!subject) {
-        setError('Subject not found in demo data.');
-        setChapter(null);
-        return;
-      }
+      try {
+        setLoading(true);
+        setError(null);
 
-      // 2️⃣ Find unit in subject
-      const unit: Unit | undefined = subject.units.find(
-        u => u.id === unitId,
-      );
-      if (!unit) {
-        setError('Unit not found in demo data.');
-        setChapter(null);
-        return;
-      }
+        const docRef = firestore().collection('nodes').doc(chapterId);
+        console.log('[VideosScreen] fetching chapter doc =', docRef.path);
 
-      // 3️⃣ Find chapter in unit
-      const ch: Chapter | undefined = unit.chapters.find(
-        c => c.id === chapterId,
-      );
-      if (!ch) {
-        setError('Chapter not found in demo data.');
-        setChapter(null);
-        return;
-      }
+        const snap = await docRef.get();
 
-      setChapter(ch);
-    } catch (e: any) {
-      console.error('[VideosScreen] error loading from demo.ts', e);
-      setError('Failed to load videos.');
-      setChapter(null);
-    } finally {
-      setLoading(false);
-    }
+        if (!snap.exists) {
+          console.log('[VideosScreen] chapter doc NOT found for id =', chapterId);
+          setError('Chapter not found. Please try again later.');
+          setVideos([]);
+          return;
+        }
+
+        const data = snap.data() as ChapterDoc;
+        console.log('[VideosScreen] chapter doc data =', data);
+
+        // basic safety checks
+        if (data.type !== 'chapter') {
+          console.warn(
+            '[VideosScreen] Document type is not "chapter". type =',
+            data.type,
+          );
+        }
+        if (data.subjectId !== subjectId || data.unitId !== unitId) {
+          console.warn('[VideosScreen] subject/unit mismatch:', {
+            expectedSubjectId: subjectId,
+            expectedUnitId: unitId,
+            docSubjectId: data.subjectId,
+            docUnitId: data.unitId,
+          });
+        }
+
+        const arr = Array.isArray(data.videos) ? data.videos : [];
+        console.log(
+          '[VideosScreen] videos array length =',
+          arr.length,
+          'videos =',
+          arr,
+        );
+
+        setChapterName(data.name || 'Chapter Videos');
+        setVideos(arr);
+      } catch (e: any) {
+        console.error('[VideosScreen] Firestore load error', e);
+        setError('Failed to load videos from cloud.');
+        setVideos([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
   }, [subjectId, unitId, chapterId]);
+
+  // ─── UI states ────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -249,28 +273,24 @@ export default function VideosScreen() {
     );
   }
 
-  if (error || !subjectId || !unitId || !chapterId) {
+  if (error) {
     return (
       <View style={styles.center}>
-        <Text style={styles.errorText}>{error || 'Missing chapter selection.'}</Text>
+        <Text style={styles.errorText}>{error}</Text>
       </View>
     );
   }
 
-  const videos: DemoVideo[] = (chapter?.videos || []) as DemoVideo[];
-
   return (
     <View style={styles.screen}>
+      <Text style={styles.headerTitle}>{chapterName}</Text>
+      <Text style={styles.headerSub}>Tap a video to start playing</Text>
+
       {videos.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>No videos available</Text>
           <Text style={styles.emptyText}>
-            This chapter doesn’t have any videos in the demo data yet.
-          </Text>
-          <Text style={styles.emptyHint}>
-            You can add YouTube or Google Drive links in{' '}
-            <Text style={{ fontWeight: '700' }}>chapter.videos</Text> inside{' '}
-            <Text style={{ fontWeight: '700' }}>src/data/demo.ts</Text>.
+            This chapter doesn’t have any videos added yet.
           </Text>
         </View>
       ) : (
@@ -282,12 +302,13 @@ export default function VideosScreen() {
             <TouchableOpacity
               style={styles.row}
               activeOpacity={0.85}
-              onPress={() =>
+              onPress={() => {
+                console.log('[VideosScreen] opening video =', item);
                 navigation.navigate('VideoPlayer', {
                   title: item.title || `Video ${index + 1}`,
                   url: item.url,
-                })
-              }
+                });
+              }}
             >
               <Text style={styles.videoIndex}>Video {index + 1}</Text>
               <Text style={styles.videoTitle} numberOfLines={2}>
@@ -313,9 +334,7 @@ export default function VideosScreen() {
   );
 }
 
-/**
- * Theme-aware styles – dark by default, flips when isDark=false
- */
+/** Theme-aware styles */
 const createStyles = (isDark: boolean) =>
   StyleSheet.create({
     // main wrapper
@@ -323,6 +342,18 @@ const createStyles = (isDark: boolean) =>
       flex: 1,
       backgroundColor: isDark ? '#0F172A' : '#F9FAFB',
       padding: 16,
+    },
+
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: isDark ? '#F9FAFB' : '#111827',
+      marginBottom: 2,
+    },
+    headerSub: {
+      fontSize: 12,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      marginBottom: 10,
     },
 
     // video card
@@ -404,11 +435,8 @@ const createStyles = (isDark: boolean) =>
       color: isDark ? '#E5E7EB' : '#4B5563',
       marginBottom: 6,
     },
-    emptyHint: {
-      fontSize: 11,
-      color: isDark ? '#9CA3AF' : '#6B7280',
-    },
   });
+
 
 //Last uodated 22-11-25
 // src/screens/Content/VideosScreen.tsx

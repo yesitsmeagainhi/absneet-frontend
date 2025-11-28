@@ -519,7 +519,14 @@ export type RootStackParamList = {
         questions?: Question[];
         explanation?: string;
     };
-    VideoPlayer: { title: string; url: string };
+    // VideoPlayer: { title: string; url: string };
+    VideoPlayer: {
+        url?: string;
+        title?: string;
+        chapterId?: string;
+        videoId?: string;
+    };
+
     CustomMCQQuiz: { subjectId?: string } | undefined;
     MockTestPapers: undefined;
     CustomMCQSolve: { questions: CustomMcqQuestionParam[] };
@@ -675,7 +682,7 @@ export default function RootNavigator() {
                 name="PDFViewer"
                 component={PdfViewerScreen}
                 options={({ route }) => ({
-                    title: route.params?.title || 'PDF',
+                    title: route.params?.title || 'View PDF',
                 })}
             />
 

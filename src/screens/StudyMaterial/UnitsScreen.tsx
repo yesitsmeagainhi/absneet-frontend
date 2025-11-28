@@ -262,7 +262,29 @@ export default function UnitsScreen({ route, navigation }: Props) {
             isMounted = false;
         };
     }, [subjectId]);
+    const [subjectName, setSubjectName] = useState<string>('');
 
+    useEffect(() => {
+        const loadSubjectMeta = async () => {
+            try {
+                if (!subjectId) return;
+
+                const snap = await firestore()
+                    .collection('nodes')
+                    .doc(subjectId)
+                    .get();
+
+                const data = snap.data() as any | undefined;
+                console.log('[UnitsScreen] subject meta =', data);
+
+                setSubjectName(data?.name ?? '');
+            } catch (e) {
+                console.log('[UnitsScreen] failed to load subject meta', e);
+            }
+        };
+
+        loadSubjectMeta();
+    }, [subjectId]);
     const handlePressUnit = (unit: UnitDoc) => {
         navigation.navigate('Chapters', {
             subjectId,
@@ -309,7 +331,11 @@ export default function UnitsScreen({ route, navigation }: Props) {
                         activeOpacity={0.8}
                         onPress={() => handlePressUnit(item)}
                     >
-                        <Text style={styles.unitIndex}>Unit {index + 1}</Text>
+                        <Text style={styles.unitIndex}>
+                            {subjectName
+                                ? `${subjectName}`        // e.g. "Physics"
+                                : `Unit ${index + 1}`}    
+                        </Text>
                         <Text style={styles.unitName}>{item.name}</Text>
                     </TouchableOpacity>
                 )}

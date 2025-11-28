@@ -115,8 +115,7 @@
 //     },
 // };
 
-
-// src/screens/Content/PdfsScreen.tsx 
+// src/screens/Content/PdfsScreen.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     View,
@@ -129,24 +128,24 @@ import {
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
-
-// 🔹 Static data instead of Firestore
-import {
-    SUBJECTS,
-    Subject,
-    Unit,
-    Chapter,
-} from '../../data/demo';
-
-import { useTheme } from '../../theme/ThemeContext';   // ✅ global theme
+import firestore from '@react-native-firebase/firestore';
+import { useTheme } from '../../theme/ThemeContext';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-type DemoPdf = {
+type FirestorePdf = {
     id: string;
     title: string;
-    url: string; // can be Google Drive, normal URL, etc.
+    url: string; // Google Drive or any URL
     provider?: 'drive' | 'other';
+};
+
+type ChapterDoc = {
+    type: 'chapter';
+    name?: string;
+    subjectId: string;
+    unitId: string;
+    pdfs?: FirestorePdf[];
 };
 
 export default function PdfsScreen() {
@@ -155,63 +154,82 @@ export default function PdfsScreen() {
 
     const rootNav = useNavigation<Nav>();
 
-    const { isDark } = useTheme();                                  // ✅ read theme
-    const styles = useMemo(() => createStyles(isDark), [isDark]);   // ✅ themed styles
+    const { isDark } = useTheme();
+    const styles = useMemo(() => createStyles(isDark), [isDark]);
 
-    const [chapter, setChapter] = useState<Chapter | null>(null);
+    const [chapterName, setChapterName] = useState<string>('Chapter PDFs');
+    const [pdfs, setPdfs] = useState<FirestorePdf[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // 🔥 Load chapter + PDFs from Firestore
     useEffect(() => {
-        try {
-            setLoading(true);
-            setError(null);
+        const load = async () => {
+            console.log('[PdfsScreen] route params =', {
+                subjectId,
+                unitId,
+                chapterId,
+            });
 
             if (!subjectId || !unitId || !chapterId) {
                 setError('Missing chapter selection.');
-                setChapter(null);
+                setLoading(false);
                 return;
             }
 
-            // 1️⃣ Find subject
-            const subject: Subject | undefined = SUBJECTS.find(
-                s => s.id === subjectId,
-            );
-            if (!subject) {
-                setError('Subject not found in demo data.');
-                setChapter(null);
-                return;
-            }
+            try {
+                setLoading(true);
+                setError(null);
 
-            // 2️⃣ Find unit inside subject
-            const unit: Unit | undefined = subject.units.find(
-                u => u.id === unitId,
-            );
-            if (!unit) {
-                setError('Unit not found in demo data.');
-                setChapter(null);
-                return;
-            }
+                const docRef = firestore().collection('nodes').doc(chapterId);
+                console.log('[PdfsScreen] fetching chapter doc =', docRef.path);
 
-            // 3️⃣ Find chapter inside unit
-            const ch: Chapter | undefined = unit.chapters.find(
-                c => c.id === chapterId,
-            );
-            if (!ch) {
-                setError('Chapter not found in demo data.');
-                setChapter(null);
-                return;
-            }
+                const snap = await docRef.get();
 
-            setChapter(ch);
-        } catch (e: any) {
-            console.error('[PdfsScreen] error loading from demo.ts', e);
-            setError('Failed to load PDFs.');
-            setChapter(null);
-        } finally {
-            setLoading(false);
-        }
+                if (!snap.exists) {
+                    console.log('[PdfsScreen] chapter doc NOT found for id =', chapterId);
+                    setError('Chapter not found. Please try again later.');
+                    setPdfs([]);
+                    return;
+                }
+
+                const data = snap.data() as ChapterDoc;
+                console.log('[PdfsScreen] chapter doc data =', data);
+
+                if (data.type !== 'chapter') {
+                    console.warn(
+                        '[PdfsScreen] Document type is not "chapter". type =',
+                        data.type,
+                    );
+                }
+
+                if (data.subjectId !== subjectId || data.unitId !== unitId) {
+                    console.warn('[PdfsScreen] subject/unit mismatch:', {
+                        expectedSubjectId: subjectId,
+                        expectedUnitId: unitId,
+                        docSubjectId: data.subjectId,
+                        docUnitId: data.unitId,
+                    });
+                }
+
+                const arr = Array.isArray(data.pdfs) ? data.pdfs : [];
+                console.log('[PdfsScreen] pdfs array length =', arr.length, 'pdfs =', arr);
+
+                setChapterName(data.name || 'Chapter PDFs');
+                setPdfs(arr);
+            } catch (e: any) {
+                console.error('[PdfsScreen] Firestore load error', e);
+                setError('Failed to load PDFs from cloud.');
+                setPdfs([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        load();
     }, [subjectId, unitId, chapterId]);
+
+    // ─── UI states ────────────────────────────────────────────────
 
     if (loading) {
         return (
@@ -222,28 +240,24 @@ export default function PdfsScreen() {
         );
     }
 
-    if (error || !subjectId || !unitId || !chapterId) {
+    if (error) {
         return (
             <View style={styles.center}>
-                <Text style={styles.errorText}>{error || 'Missing chapter selection.'}</Text>
+                <Text style={styles.errorText}>{error}</Text>
             </View>
         );
     }
 
-    const pdfs: DemoPdf[] = (chapter?.pdfs || []) as DemoPdf[];
-
     return (
         <View style={styles.screen}>
+            <Text style={styles.headerTitle}>{chapterName}</Text>
+            <Text style={styles.headerSub}>Tap a PDF to open the viewer</Text>
+
             {pdfs.length === 0 ? (
                 <View style={styles.emptyCard}>
                     <Text style={styles.emptyTitle}>No PDFs available</Text>
                     <Text style={styles.emptyText}>
-                        This chapter doesn’t have any PDFs in the demo data yet.
-                    </Text>
-                    <Text style={styles.emptyHint}>
-                        Add Google Drive or other PDF links in{' '}
-                        <Text style={{ fontWeight: '700' }}>chapter.pdfs</Text> inside{' '}
-                        <Text style={{ fontWeight: '700' }}>src/data/demo.ts</Text>.
+                        This chapter doesn’t have any PDFs added yet.
                     </Text>
                 </View>
             ) : (
@@ -261,13 +275,12 @@ export default function PdfsScreen() {
                                 style={styles.row}
                                 activeOpacity={0.85}
                                 onPress={() => {
-                                    console.log('[PdfsScreen] open PDF', item.url);
-
+                                    console.log('[PdfsScreen] open PDF', item);
                                     // 🧭 Navigate to stack-level PDF viewer
                                     const parent = (rootNav as any).getParent?.();
                                     (parent || rootNav).navigate('PDFViewer', {
                                         title: item.title || `PDF ${index + 1}`,
-                                        url: item.url, // Drive link will open in Drive viewer inside PDFViewer WebView
+                                        url: item.url,
                                     });
                                 }}
                             >
@@ -290,9 +303,7 @@ export default function PdfsScreen() {
     );
 }
 
-/**
- * Theme-aware styles – dark by default, flip when isDark=false
- */
+/** Theme-aware styles – dark by default, flip when isDark=false */
 const createStyles = (isDark: boolean) =>
     StyleSheet.create({
         // main wrapper
@@ -300,6 +311,18 @@ const createStyles = (isDark: boolean) =>
             flex: 1,
             backgroundColor: isDark ? '#0F172A' : '#F9FAFB',
             padding: 16,
+        },
+
+        headerTitle: {
+            fontSize: 18,
+            fontWeight: '700',
+            color: isDark ? '#F9FAFB' : '#111827',
+            marginBottom: 2,
+        },
+        headerSub: {
+            fontSize: 12,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            marginBottom: 10,
         },
 
         // pdf card
@@ -336,7 +359,7 @@ const createStyles = (isDark: boolean) =>
             borderRadius: 999,
             fontSize: 10,
             fontWeight: '600',
-            backgroundColor: isDark ? '#064E3B' : '#ECFDF3', // darker green chip in dark mode
+            backgroundColor: isDark ? '#064E3B' : '#ECFDF3',
             color: isDark ? '#BBF7D0' : '#15803D',
         },
 

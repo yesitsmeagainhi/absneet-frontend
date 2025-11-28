@@ -400,6 +400,7 @@ import {
     orderBy,
     getDocs,
 } from 'firebase/firestore';
+import firestore from '@react-native-firebase/firestore';
 
 import { useTheme } from '../../theme/ThemeContext';
 
@@ -422,6 +423,8 @@ export default function ChaptersScreen({ route, navigation }: Props) {
     const [chapters, setChapters] = useState<ChapterNode[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [subjectName, setSubjectName] = useState<string>('');
+    const [unitName, setUnitName] = useState<string>('');
 
     useEffect(() => {
         const fetchChapters = async () => {
@@ -462,7 +465,29 @@ export default function ChaptersScreen({ route, navigation }: Props) {
             chapterId: chapter.id,
         });
     };
+    useEffect(() => {
+        const loadMeta = async () => {
+            try {
+                if (!subjectId || !unitId) return;
 
+                const subjectSnap = await firestore()
+                    .collection('nodes')
+                    .doc(subjectId)
+                    .get();
+                const unitSnap = await firestore()
+                    .collection('nodes')
+                    .doc(unitId)
+                    .get();
+
+                setSubjectName((subjectSnap.data() as any)?.name ?? '');
+                setUnitName((unitSnap.data() as any)?.name ?? '');
+            } catch (e) {
+                console.log('[ChaptersScreen] meta load error', e);
+            }
+        };
+
+        loadMeta();
+    }, [subjectId, unitId]);
     if (loading) {
         return (
             <View style={styles.center}>
@@ -502,8 +527,14 @@ export default function ChaptersScreen({ route, navigation }: Props) {
                         activeOpacity={0.8}
                         onPress={() => handlePressChapter(item)}
                     >
-                        <Text style={styles.chapterIndex}>Chapter {index + 1}</Text>
+                        <Text style={styles.chapterIndex}>
+                            {subjectName
+                                ? `${subjectName} • ${unitName || 'Unit'}`
+                                : unitName || 'Unit'}
+                        </Text>
+
                         <Text style={styles.chapterName}>{item.name}</Text>
+
                     </TouchableOpacity>
                 )}
             />
