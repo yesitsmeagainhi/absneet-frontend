@@ -21,7 +21,6 @@
 //     );
 // }
 // const styles = StyleSheet.create({ c: { flex: 1, padding: 16, gap: 12, justifyContent: 'center' }, inp: { borderWidth: 1, borderColor: '#ccc', borderRadius: 10, padding: 12 } });
-
 // src/screens/Auth/LoginScreen.tsx
 import React, { useState } from 'react';
 import {
@@ -33,7 +32,6 @@ import {
     KeyboardAvoidingView,
     Platform,
     ScrollView,
-    Alert,
     ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -45,43 +43,93 @@ import { db } from '../../services/firebase.native';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
+type FormErrors = {
+    number?: string;
+    pass?: string;
+};
+
 export default function LoginScreen({ navigation }: Props) {
     const [number, setNumber] = useState('');
     const [pass, setPass] = useState('');
     const [loading, setLoading] = useState(false);
+    const [errors, setErrors] = useState<FormErrors>({});
+    const [globalError, setGlobalError] = useState<string | null>(null);
+
+    const validate = (): boolean => {
+        const trimmedNumber = number.trim();
+        const trimmedPass = pass.trim();
+        const newErrors: FormErrors = {};
+
+        // 🔹 Mobile validation
+        if (!trimmedNumber) {
+            newErrors.number = 'Mobile number is required.';
+        } else if (!/^\d+$/.test(trimmedNumber)) {
+            newErrors.number = 'Mobile number should contain only digits.';
+        } else if (trimmedNumber.length !== 10) {
+            newErrors.number = 'Mobile number must be exactly 10 digits.';
+        }
+
+        // 🔹 Password validation
+        if (!trimmedPass) {
+            newErrors.pass = 'Password is required.';
+        } else if (trimmedPass.length < 6) {
+            newErrors.pass = 'Password should be at least 6 characters.';
+        }
+
+        setErrors(newErrors);
+
+        if (Object.keys(newErrors).length > 0) {
+            const hasMultiple = Object.keys(newErrors).length > 1;
+            const firstErrorMsg =
+                newErrors.number || newErrors.pass || 'Please check your details.';
+
+            setGlobalError(
+                hasMultiple
+                    ? 'Input fields are missing or incorrect!'
+                    : firstErrorMsg,
+            );
+            return false;
+        }
+
+        setGlobalError(null);
+        return true;
+    };
 
     const handleLogin = async () => {
+        if (!validate()) return;
+
         const mobile = number.trim();
         const password = pass.trim();
 
-        if (!mobile || !password) {
-            Alert.alert('Missing details', 'Please enter both mobile number and password.');
-            return;
-        }
-
         try {
             setLoading(true);
+            setGlobalError(null);
 
-            // 🔎 Look for a user in the "authentication" collection
             const snap = await db
                 .collection('authentication')
                 .where('mobile', '==', mobile)
-                .where('password', '==', password) // ⚠️ plain-text only for demo
+                .where('password', '==', password) // ⚠️ plain text for demo only
                 .limit(1)
                 .get();
 
             if (snap.empty) {
-                Alert.alert('Login failed', 'Invalid mobile number or password.');
+                // Wrong credentials
+                setErrors(prev => ({
+                    ...prev,
+                    pass: 'Invalid mobile number or password.',
+                }));
+                setGlobalError(
+                    'Invalid mobile number or password. Please check your details.',
+                );
                 return;
             }
 
-            // ✅ User found – you can also read profile with snap.docs[0].data()
+            // ✅ User found – navigate inside app
             navigation.replace('HomeTabs');
         } catch (err: any) {
             console.warn('Login Firestore error:', err);
-            Alert.alert(
-                'Login error',
-                err?.message || 'Something went wrong while logging you in.'
+            setGlobalError(
+                'Something went wrong while logging you in. Please try again.',
             );
         } finally {
             setLoading(false);
@@ -110,17 +158,38 @@ export default function LoginScreen({ navigation }: Props) {
                             Login to continue your NEET preparation journey.
                         </Text>
 
+                        {/* Global error banner */}
+                        {globalError && (
+                            <View style={styles.globalErrorBox}>
+                                <Text style={styles.globalErrorText}>{globalError}</Text>
+                            </View>
+                        )}
+
                         {/* Mobile number */}
                         <View style={styles.fieldGroup}>
                             <Text style={styles.label}>Mobile Number</Text>
                             <TextInput
-                                placeholder="Enter your number"
+                                placeholder="Enter your 10-digit number"
                                 placeholderTextColor="#9CA3AF"
-                                style={styles.input}
-                                keyboardType="phone-pad"
+                                style={[
+                                    styles.input,
+                                    errors.number && styles.inputError,
+                                ]}
+                                keyboardType="number-pad"
+                                maxLength={10}
                                 value={number}
-                                onChangeText={setNumber}
+                                onChangeText={txt => {
+                                    const onlyDigits = txt.replace(/[^0-9]/g, '');
+                                    setNumber(onlyDigits);
+                                    if (errors.number) {
+                                        setErrors(prev => ({ ...prev, number: undefined }));
+                                    }
+                                    if (globalError) setGlobalError(null);
+                                }}
                             />
+                            {!!errors.number && (
+                                <Text style={styles.errorText}>{errors.number}</Text>
+                            )}
                         </View>
 
                         {/* Password */}
@@ -129,11 +198,24 @@ export default function LoginScreen({ navigation }: Props) {
                             <TextInput
                                 placeholder="Enter password"
                                 placeholderTextColor="#9CA3AF"
-                                style={styles.input}
+                                style={[
+                                    styles.input,
+                                    errors.pass && styles.inputError,
+                                ]}
                                 secureTextEntry
+                                autoCapitalize="none"
                                 value={pass}
-                                onChangeText={setPass}
+                                onChangeText={txt => {
+                                    setPass(txt);
+                                    if (errors.pass) {
+                                        setErrors(prev => ({ ...prev, pass: undefined }));
+                                    }
+                                    if (globalError) setGlobalError(null);
+                                }}
                             />
+                            {!!errors.pass && (
+                                <Text style={styles.errorText}>{errors.pass}</Text>
+                            )}
                         </View>
 
                         {/* Login button */}
@@ -226,6 +308,21 @@ const styles = StyleSheet.create({
         marginBottom: 18,
     },
 
+    // global error banner
+    globalErrorBox: {
+        marginBottom: 12,
+        paddingVertical: 8,
+        paddingHorizontal: 10,
+        borderRadius: 16,
+        backgroundColor: '#FEF2F2',
+        borderWidth: 1,
+        borderColor: '#FCA5A5',
+    },
+    globalErrorText: {
+        fontSize: 12,
+        color: '#B91C1C',
+    },
+
     fieldGroup: {
         marginBottom: 12,
     },
@@ -243,6 +340,14 @@ const styles = StyleSheet.create({
         color: '#111827',
         fontSize: 13,
         backgroundColor: '#F9FAFB',
+    },
+    inputError: {
+        borderColor: '#F97373',
+    },
+    errorText: {
+        marginTop: 4,
+        fontSize: 11,
+        color: '#DC2626',
     },
 
     primaryBtn: {

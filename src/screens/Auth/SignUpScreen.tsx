@@ -1,5 +1,5 @@
 // src/screens/Auth/SignUpScreen.tsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,9 +18,37 @@ import { RootStackParamList } from '../../navigation/rootnavigator';
 
 // 🔹 Firestore imports
 import firestore from '@react-native-firebase/firestore';
-import { db } from '../../services/firebase.native'; // 👈 adjust path if your db export is elsewhere
+import { db } from '../../services/firebase.native';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
+
+type FormErrors = {
+  number?: string;
+  pass?: string;
+  edu?: string;
+  city?: string;
+};
+
+// 🔹 City suggestions (you can extend this list anytime)
+const CITY_OPTIONS = [
+  'Mumbai',
+  'Thane',
+  'Navi Mumbai',
+  'Pune',
+  'Bangalore',
+  'Hyderabad',
+  'Delhi',
+  'Kolkata',
+  'Chennai',
+  'Ahmedabad',
+  'Jaipur',
+  'Surat',
+  'Indore',
+  'Nagpur',
+  'Nalasopara',
+  'Bhayandar',
+  'Vasai',
+];
 
 export default function SignUpScreen({ navigation }: Props) {
   const [number, setNumber] = useState('');
@@ -28,40 +56,119 @@ export default function SignUpScreen({ navigation }: Props) {
   const [edu, setEdu] = useState('');
   const [city, setCity] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [showCitySuggestions, setShowCitySuggestions] = useState(false);
 
-  const handleSignUp = async () => {
-    if (!number.trim() || !pass.trim() || !edu.trim() || !city.trim()) {
-      Alert.alert('Missing details', 'Please fill all fields before continuing.');
-      return;
+  // 🔹 Global error banner message
+  const [globalError, setGlobalError] = useState<string | null>(null);
+
+  // Filtered city suggestions based on typed text
+  const filteredCities = useMemo(() => {
+    const q = city.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return CITY_OPTIONS.filter(c =>
+      c.toLowerCase().includes(q),
+    );
+  }, [city]);
+
+  const validate = (): boolean => {
+    const newErrors: FormErrors = {};
+    const trimmedNumber = number.trim();
+    const trimmedPass = pass.trim();
+    const trimmedEdu = edu.trim();
+    const trimmedCity = city.trim();
+
+    setGlobalError(null);
+
+    // 🔹 Mobile validation
+    if (!trimmedNumber) {
+      newErrors.number = 'Mobile number is required.';
+    } else if (!/^\d+$/.test(trimmedNumber)) {
+      newErrors.number = 'Mobile number should contain only digits.';
+    } else if (trimmedNumber.length !== 10) {
+      newErrors.number = 'Mobile number must be exactly 10 digits.';
     }
 
-    // 📛 WARNING (important in real app):
-    // Storing raw passwords in Firestore is NOT secure.
-    // For real auth, use Firebase Authentication and only store profile data in Firestore.
+    // 🔹 Password validation
+    if (!trimmedPass) {
+      newErrors.pass = 'Password is required.';
+    } else if (trimmedPass.length < 6) {
+      newErrors.pass = 'Password should be at least 6 characters.';
+    }
+
+    // 🔹 Education validation
+    if (!trimmedEdu) {
+      newErrors.edu = 'Please enter your current course / class.';
+    } else if (trimmedEdu.length < 3) {
+      newErrors.edu = 'Education description looks too short.';
+    }
+
+    // 🔹 City validation
+    if (!trimmedCity) {
+      newErrors.city = 'Please enter your city.';
+    }
+
+    setErrors(newErrors);
+
+    const errorKeys = Object.keys(newErrors);
+    const errorCount = errorKeys.length;
+
+    if (errorCount > 0) {
+      let message: string;
+
+      if (errorCount === 1) {
+        // If only one field is wrong, show that exact message
+        const onlyError = (Object.values(newErrors)[0] as string) || '';
+        message = onlyError || 'Please correct the highlighted field.';
+      } else {
+        // If multiple fields are wrong, show general message
+        message =
+          'Some details look incorrect. Please correct the fields or check your input.';
+      }
+
+      // setGlobalError(message);
+      // Alert.alert('Check your details', message);
+      return false;
+    }
+
+    setGlobalError(null);
+    return true;
+  };
+
+  const handleSignUp = async () => {
+    if (!validate()) return;
+
     try {
       setLoading(true);
 
-      // 🔹 Create a document in a Firestore "authentication" collection
-      // You can rename "authentication" to "users" / "authUsers" etc.
       await db.collection('authentication').add({
         mobile: number.trim(),
-        password: pass.trim(), // ❗ not safe in production – use hashing / Firebase Auth instead
+        password: pass.trim(), // ⚠️ For real apps use Firebase Auth or hashing
         education: edu.trim(),
         city: city.trim(),
         createdAt: firestore.FieldValue.serverTimestamp(),
       });
 
-      // After saving, go to main app
+      // reset errors & banner
+      setErrors({});
+      setGlobalError(null);
+
       navigation.replace('HomeTabs');
     } catch (err: any) {
       console.warn('SignUp Firestore error:', err);
       Alert.alert(
         'Sign up failed',
-        err?.message || 'Something went wrong while creating your account.'
+        err?.message || 'Something went wrong while creating your account.',
       );
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCitySelect = (value: string) => {
+    setCity(value);
+    setShowCitySuggestions(false);
+    setErrors(prev => ({ ...prev, city: undefined }));
   };
 
   return (
@@ -86,30 +193,62 @@ export default function SignUpScreen({ navigation }: Props) {
               We’ll personalise your practice plan based on your details.
             </Text>
 
+            {/* 🔴 Global error banner */}
+            {globalError && (
+              <View style={styles.globalErrorBox}>
+                <Text style={styles.globalErrorText}>{globalError}</Text>
+              </View>
+            )}
+
             {/* Mobile number */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Mobile Number</Text>
               <TextInput
-                placeholder="Enter your number"
+                placeholder="Enter your 10-digit number"
                 placeholderTextColor="#9CA3AF"
-                style={styles.input}
-                keyboardType="phone-pad"
+                style={[
+                  styles.input,
+                  errors.number && styles.inputError,
+                ]}
+                keyboardType="number-pad"
+                maxLength={10}
                 value={number}
-                onChangeText={setNumber}
+                onChangeText={txt => {
+                  const onlyDigits = txt.replace(/[^0-9]/g, '');
+                  setNumber(onlyDigits);
+                  if (errors.number) {
+                    setErrors(prev => ({ ...prev, number: undefined }));
+                  }
+                }}
               />
+              {!!errors.number && (
+                <Text style={styles.errorText}>{errors.number}</Text>
+              )}
             </View>
 
             {/* Password */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Password</Text>
               <TextInput
-                placeholder="Create a password"
+                placeholder="Create a password (min 6 characters)"
                 placeholderTextColor="#9CA3AF"
-                style={styles.input}
+                style={[
+                  styles.input,
+                  errors.pass && styles.inputError,
+                ]}
                 secureTextEntry
+                autoCapitalize="none"
                 value={pass}
-                onChangeText={setPass}
+                onChangeText={txt => {
+                  setPass(txt);
+                  if (errors.pass) {
+                    setErrors(prev => ({ ...prev, pass: undefined }));
+                  }
+                }}
               />
+              {!!errors.pass && (
+                <Text style={styles.errorText}>{errors.pass}</Text>
+              )}
             </View>
 
             {/* Current education */}
@@ -118,22 +257,67 @@ export default function SignUpScreen({ navigation }: Props) {
               <TextInput
                 placeholder="e.g. 11th Science, 12th Science, Dropper"
                 placeholderTextColor="#9CA3AF"
-                style={styles.input}
+                style={[
+                  styles.input,
+                  errors.edu && styles.inputError,
+                ]}
                 value={edu}
-                onChangeText={setEdu}
+                onChangeText={txt => {
+                  setEdu(txt);
+                  if (errors.edu) {
+                    setErrors(prev => ({ ...prev, edu: undefined }));
+                  }
+                }}
               />
+              {!!errors.edu && (
+                <Text style={styles.errorText}>{errors.edu}</Text>
+              )}
             </View>
 
-            {/* City */}
+            {/* City with suggestions */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>City</Text>
               <TextInput
                 placeholder="e.g. Mumbai"
                 placeholderTextColor="#9CA3AF"
-                style={styles.input}
+                style={[
+                  styles.input,
+                  errors.city && styles.inputError,
+                ]}
                 value={city}
-                onChangeText={setCity}
+                onFocus={() => setShowCitySuggestions(true)}
+                onBlur={() => {
+                  // slight delay so press on suggestion still works
+                  setTimeout(() => setShowCitySuggestions(false), 150);
+                }}
+                onChangeText={txt => {
+                  setCity(txt);
+                  setShowCitySuggestions(true);
+                  if (errors.city) {
+                    setErrors(prev => ({ ...prev, city: undefined }));
+                  }
+                }}
               />
+              {!!errors.city && (
+                <Text style={styles.errorText}>{errors.city}</Text>
+              )}
+
+              {showCitySuggestions && filteredCities.length > 0 && (
+                <View style={styles.suggestionBox}>
+                  {filteredCities.map(c => (
+                    <Pressable
+                      key={c}
+                      onPress={() => handleCitySelect(c)}
+                      style={({ pressed }) => [
+                        styles.suggestionItem,
+                        pressed && styles.suggestionItemPressed,
+                      ]}
+                    >
+                      <Text style={styles.suggestionText}>{c}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
             </View>
 
             {/* Create account button */}
@@ -226,6 +410,32 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
 
+  // global error banner
+  globalErrorBox: {
+    marginBottom: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    // subtle shadow for card feel
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  globalErrorText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#B91C1C',
+  },
+
+
   fieldGroup: {
     marginBottom: 12,
   },
@@ -243,6 +453,36 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontSize: 13,
     backgroundColor: '#F9FAFB',
+  },
+  inputError: {
+    borderColor: '#F97373',
+  },
+  errorText: {
+    marginTop: 4,
+    fontSize: 11,
+    color: '#DC2626',
+  },
+
+  // suggestions
+  suggestionBox: {
+    marginTop: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    maxHeight: 150,
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  suggestionItemPressed: {
+    backgroundColor: '#EEF2FF',
+  },
+  suggestionText: {
+    fontSize: 13,
+    color: '#111827',
   },
 
   primaryBtn: {
