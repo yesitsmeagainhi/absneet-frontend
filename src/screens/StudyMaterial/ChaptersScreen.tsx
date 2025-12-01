@@ -427,36 +427,37 @@ export default function ChaptersScreen({ route, navigation }: Props) {
     const [unitName, setUnitName] = useState<string>('');
 
     useEffect(() => {
-        const fetchChapters = async () => {
-            try {
-                setLoading(true);
-                setError(null);
+        if (!unitId) return;
 
-                // 🔹 nodes where parentId = unitId AND type = 'chapter'
-                const q = query(
-                    collection(db, 'nodes'),
-                    where('parentId', '==', unitId),
-                    where('type', '==', 'chapter'),
-                    orderBy('order', 'asc') // make sure 'order' exists, or remove if not using
-                );
+        setLoading(true);
+        setError(null);
 
-                const snap = await getDocs(q);
-                const list: ChapterNode[] = snap.docs.map(d => ({
+        const qRef = firestore()
+            .collection('nodes')
+            .where('parentId', '==', unitId)
+            .where('type', '==', 'chapter')
+            .orderBy('order', 'asc'); // remove if 'order' not present
+
+        const unsubscribe = qRef.onSnapshot(
+            snapshot => {
+                const list: ChapterNode[] = snapshot.docs.map(d => ({
                     id: d.id,
                     ...(d.data() as any),
                 }));
-
                 setChapters(list);
-            } catch (e: any) {
-                console.error('[ChaptersScreen] Failed to load chapters', e);
-                setError('Failed to load chapters. Please try again.');
-            } finally {
                 setLoading(false);
-            }
-        };
+            },
+            err => {
+                console.log('[ChaptersScreen] onSnapshot error', err);
+                setError('Failed to load chapters. Please try again.');
+                setLoading(false);
+            },
+        );
 
-        fetchChapters();
+        // 🔁 Cleanup listener when unitId changes / screen unmounts
+        return () => unsubscribe();
     }, [unitId]);
+
 
     const handlePressChapter = (chapter: ChapterNode) => {
         navigation.navigate('ContentTabs', {
