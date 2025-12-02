@@ -457,10 +457,12 @@
 //             />
 //         </Stack.Navigator>
 //     );
-// }// src/navigation/RootNavigator.tsx
+// }
+// src/navigation/RootNavigator.tsx
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar, ActivityIndicator, View, Text, StyleSheet } from 'react-native';
 
 import LoginScreen from '../screens/Auth/LoginScreen';
 import SignUpScreen from '../screens/Auth/SignUpScreen';
@@ -488,6 +490,10 @@ import MockTestPapersScreen from '../screens/Papers/MostTestPapersScreen';
 
 import type { Question } from '../data/demo';
 import { useTheme } from '../theme/ThemeContext';
+
+// 🔹 Firebase Auth + AsyncStorage
+import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type CustomMcqQuestionParam = {
     id: string;
@@ -519,7 +525,6 @@ export type RootStackParamList = {
         questions?: Question[];
         explanation?: string;
     };
-    // VideoPlayer: { title: string; url: string };
     VideoPlayer: {
         url?: string;
         title?: string;
@@ -561,172 +566,272 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+// 🔐 Session TTL config
+const LAST_LOGIN_KEY = 'abs_neet_last_login_at';
+const SESSION_TTL_DAYS = 365;
+const MS_IN_DAY = 1000 * 60 * 60 * 24;
+
 export default function RootNavigator() {
     const { isDark } = useTheme();
     const insets = useSafeAreaInsets();
+
+    const [initializing, setInitializing] = React.useState(true);
+    const [user, setUser] = React.useState<FirebaseAuthTypes.User | null>(null);
+
+    // 🔥 Listen to Firebase Auth state + enforce 1-year TTL
+    React.useEffect(() => {
+        const unsubscribe = auth().onAuthStateChanged(async (firebaseUser) => {
+            try {
+                if (firebaseUser) {
+                    const now = Date.now();
+                    const stored = await AsyncStorage.getItem(LAST_LOGIN_KEY);
+
+                    if (stored) {
+                        const lastLogin = parseInt(stored, 10);
+                        const diffDays = (now - lastLogin) / MS_IN_DAY;
+
+                        if (diffDays > SESSION_TTL_DAYS) {
+                            // ⛔ Session expired – sign out & clear stored date
+                            await auth().signOut();
+                            await AsyncStorage.removeItem(LAST_LOGIN_KEY);
+                            setUser(null);
+                            setInitializing(false);
+                            return;
+                        }
+                    } else {
+                        // first time seeing this user, set timestamp
+                        await AsyncStorage.setItem(LAST_LOGIN_KEY, String(now));
+                    }
+
+                    // ✅ Valid, non-expired session
+                    setUser(firebaseUser);
+                } else {
+                    setUser(null);
+                }
+            } catch (e) {
+                console.warn('[RootNavigator] error in auth state / TTL check', e);
+                // If something goes wrong, still let Firebase decide
+                setUser(firebaseUser ?? null);
+            } finally {
+                setInitializing(false);
+            }
+        });
+
+        return unsubscribe;
+    }, []);
 
     const headerBg = isDark ? '#0F172A' : '#FFFFFF';
     const headerText = isDark ? '#F9FAFB' : '#111827';
     const screenBg = isDark ? '#020617' : '#F9FAFB';
 
+    // 🔄 Small splash while we decide whether user is logged in
+    if (initializing) {
+        return (
+            <View
+                style={[
+                    stylesInit.splash,
+                    { backgroundColor: screenBg, paddingBottom: insets.bottom },
+                ]}
+            >
+                <StatusBar
+                    barStyle={isDark ? 'light-content' : 'dark-content'}
+                    backgroundColor={headerBg}
+                />
+                <ActivityIndicator color={isDark ? '#E5E7EB' : '#4B5563'} />
+                <Text style={[stylesInit.splashText, { color: headerText }]}>
+                    Preparing your NEET practice…
+                </Text>
+            </View>
+        );
+    }
+
     return (
-        <Stack.Navigator
-            screenOptions={{
-                headerTitleAlign: 'center',
-
-                // ✅ Header follows theme
-                headerStyle: {
-                    backgroundColor: headerBg,
-                },
-                headerTintColor: headerText,
-                headerTitleStyle: {
-                    color: headerText,
-                    fontSize: 16,
-                    fontWeight: '700',
-                },
-                headerShadowVisible: false,
-
-                // ✅ Content respects safe area bottom + theme background
-                contentStyle: {
-                    backgroundColor: screenBg,
-                    // small bottom inset so screens never clash with gesture bar / nav bar
-                    paddingBottom: insets.bottom,
-                },
-
-                // ✅ Status bar style (for native-stack on iOS / Android 12+)
-                statusBarStyle: isDark ? 'light' : 'dark',
-            }}
-        >
-            <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="SignUp" component={SignUpScreen} options={{ headerShown: false }} />
-            {/* Main app tabs (no header) */}
-            <Stack.Screen
-                name="HomeTabs"
-                component={HomeTabs}
-                options={{ headerShown: false }}
+        <>
+            <StatusBar
+                barStyle={isDark ? 'light-content' : 'dark-content'}
+                backgroundColor={headerBg}
             />
+            <Stack.Navigator
+                screenOptions={{
+                    headerTitleAlign: 'center',
+                    headerStyle: {
+                        backgroundColor: headerBg,
+                    },
+                    headerTintColor: headerText,
+                    headerTitleStyle: {
+                        color: headerText,
+                        fontSize: 16,
+                        fontWeight: '700',
+                    },
+                    headerShadowVisible: false,
+                    contentStyle: {
+                        backgroundColor: screenBg,
+                        paddingBottom: insets.bottom,
+                    },
+                    statusBarStyle: isDark ? 'light' : 'dark',
+                }}
+            >
+                {!user && (
+                    <>
+                        {/* Auth stack when not logged in */}
+                        <Stack.Screen
+                            name="Login"
+                            component={LoginScreen}
+                            options={{ headerShown: false }}
+                        />
+                        <Stack.Screen
+                            name="SignUp"
+                            component={SignUpScreen}
+                            options={{ headerShown: false }}
+                        />
+                    </>
+                )}
 
-            <Stack.Screen
-                name="DemoMCQQuiz"
-                component={DemoMCQQuizScreen}
-                options={{ title: 'Demo MCQ Quiz' }}
-            />
+                {user && (
+                    <>
+                        {/* Main app once logged in */}
+                        <Stack.Screen
+                            name="HomeTabs"
+                            component={HomeTabs}
+                            options={{ headerShown: false }}
+                        />
 
-            <Stack.Screen
-                name="NewsTest"
-                component={NewsTestScreen}
-                options={{ title: 'News' }}
-            />
+                        <Stack.Screen
+                            name="DemoMCQQuiz"
+                            component={DemoMCQQuizScreen}
+                            options={{ title: 'Demo MCQ Quiz' }}
+                        />
 
-            <Stack.Screen
-                name="Help"
-                component={HelpScreen}
-                options={{ title: 'Help & Support' }}
-            />
+                        <Stack.Screen
+                            name="NewsTest"
+                            component={NewsTestScreen}
+                            options={{ title: 'News' }}
+                        />
 
-            <Stack.Screen
-                name="SubjectDetail"
-                component={SubjectDetailScreen}
-                options={{ title: 'Subject' }}
-            />
+                        <Stack.Screen
+                            name="Help"
+                            component={HelpScreen}
+                            options={{ title: 'Help & Support' }}
+                        />
 
-            <Stack.Screen
-                name="Units"
-                component={UnitsScreen}
-                options={{ title: 'Units' }}
-            />
+                        <Stack.Screen
+                            name="SubjectDetail"
+                            component={SubjectDetailScreen}
+                            options={{ title: 'Subject' }}
+                        />
 
-            <Stack.Screen
-                name="Chapters"
-                component={ChaptersScreen}
-                options={{ title: 'Chapters' }}
-            />
+                        <Stack.Screen
+                            name="Units"
+                            component={UnitsScreen}
+                            options={{ title: 'Units' }}
+                        />
 
-            <Stack.Screen
-                name="ContentTabs"
-                component={ContentTabs}
-                options={{ title: 'Study Material' }}
-            />
+                        <Stack.Screen
+                            name="Chapters"
+                            component={ChaptersScreen}
+                            options={{ title: 'Chapters' }}
+                        />
 
-            <Stack.Screen
-                name="SelectUnitsOrChapters"
-                component={SelectUnitsOrChaptersScreen}
-                options={{ title: 'Solve MCQ' }}
-            />
+                        <Stack.Screen
+                            name="ContentTabs"
+                            component={ContentTabs}
+                            options={{ title: 'Study Material' }}
+                        />
 
-            <Stack.Screen
-                name="CustomMCQQuiz"
-                component={CustomMCQQuiz}
-                options={{ title: 'Custom MCQ Quiz' }}
-            />
+                        <Stack.Screen
+                            name="SelectUnitsOrChapters"
+                            component={SelectUnitsOrChaptersScreen}
+                            options={{ title: 'Solve MCQ' }}
+                        />
 
-            <Stack.Screen
-                name="CustomMCQSolve"
-                component={CustomMCQSolve}
-                options={{ title: 'Solve MCQ Quiz' }}
-            />
+                        <Stack.Screen
+                            name="CustomMCQQuiz"
+                            component={CustomMCQQuiz}
+                            options={{ title: 'Custom MCQ Quiz' }}
+                        />
 
-            <Stack.Screen
-                name="MCQQuiz"
-                component={MCQQuizScreen}
-                options={{ title: 'MCQ Quiz' }}
-            />
+                        <Stack.Screen
+                            name="CustomMCQSolve"
+                            component={CustomMCQSolve}
+                            options={{ title: 'Solve MCQ Quiz' }}
+                        />
 
-            <Stack.Screen
-                name="VideoPlayer"
-                component={VideoPlayerScreen}
-                options={{ title: 'Video' }}
-            />
+                        <Stack.Screen
+                            name="MCQQuiz"
+                            component={MCQQuizScreen}
+                            options={{ title: 'MCQ Quiz' }}
+                        />
 
-            <Stack.Screen
-                name="PDFViewer"
-                component={PdfViewerScreen}
-                options={({ route }) => ({
-                    title: route.params?.title || 'View PDF',
-                })}
-            />
+                        <Stack.Screen
+                            name="VideoPlayer"
+                            component={VideoPlayerScreen}
+                            options={{ title: 'Video' }}
+                        />
 
-            <Stack.Screen
-                name="Result"
-                component={ResultScreen}
-                options={{ title: 'Result' }}
-            />
+                        <Stack.Screen
+                            name="PDFViewer"
+                            component={PdfViewerScreen}
+                            options={({ route }) => ({
+                                title: route.params?.title || 'View PDF',
+                            })}
+                        />
 
-            <Stack.Screen
-                name="ReviewAnswers"
-                component={ReviewAnswersScreen}
-                options={{ title: 'Review Answers' }}
-            />
+                        <Stack.Screen
+                            name="Result"
+                            component={ResultScreen}
+                            options={{ title: 'Result' }}
+                        />
 
-            <Stack.Screen
-                name="PYQSubjects"
-                component={PYQSubjectsScreen}
-                options={{ title: 'Previous Year MCQ' }}
-            />
+                        <Stack.Screen
+                            name="ReviewAnswers"
+                            component={ReviewAnswersScreen}
+                            options={{ title: 'Review Answers' }}
+                        />
 
-            <Stack.Screen
-                name="PYQYears"
-                component={PYQYearsScreen}
-                options={{ title: 'Select Year' }}
-            />
+                        <Stack.Screen
+                            name="PYQSubjects"
+                            component={PYQSubjectsScreen}
+                            options={{ title: 'Previous Year MCQ' }}
+                        />
 
-            <Stack.Screen
-                name="PYQPdfPapers"
-                component={PYQPdfPapersScreen}
-                options={{ title: 'Previous Year MCQ Papers' }}
-            />
+                        <Stack.Screen
+                            name="PYQYears"
+                            component={PYQYearsScreen}
+                            options={{ title: 'Select Year' }}
+                        />
 
-            <Stack.Screen
-                name="PYQPapers"
-                component={PYQPapersScreen}
-                options={{ title: 'PYQ Papers' }}
-            />
+                        <Stack.Screen
+                            name="PYQPdfPapers"
+                            component={PYQPdfPapersScreen}
+                            options={{ title: 'Previous Year MCQ Papers' }}
+                        />
 
-            <Stack.Screen
-                name="MockTestPapers"
-                component={MockTestPapersScreen}
-                options={{ title: 'Mock Test Papers' }}
-            />
-        </Stack.Navigator>
+                        <Stack.Screen
+                            name="PYQPapers"
+                            component={PYQPapersScreen}
+                            options={{ title: 'PYQ Papers' }}
+                        />
+
+                        <Stack.Screen
+                            name="MockTestPapers"
+                            component={MockTestPapersScreen}
+                            options={{ title: 'Mock Test Papers' }}
+                        />
+                    </>
+                )}
+            </Stack.Navigator>
+        </>
     );
 }
+
+const stylesInit = StyleSheet.create({
+    splash: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    splashText: {
+        marginTop: 8,
+        fontSize: 13,
+    },
+});

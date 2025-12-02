@@ -38,8 +38,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../navigation/rootnavigator';
 
-// 🔹 Firestore instance (same as SignUpScreen)
-import { db } from '../../services/firebase.native';
+// ✅ Firebase Auth (React Native Firebase)
+import auth from '@react-native-firebase/auth';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -101,36 +101,40 @@ export default function LoginScreen({ navigation }: Props) {
         const mobile = number.trim();
         const password = pass.trim();
 
+        // ✅ Create a synthetic email from mobile for email/password auth
+        const email = `${mobile}@absneet.app`;
+
         try {
             setLoading(true);
             setGlobalError(null);
 
-            const snap = await db
-                .collection('authentication')
-                .where('mobile', '==', mobile)
-                .where('password', '==', password) // ⚠️ plain text for demo only
-                .limit(1)
-                .get();
+            // ✅ Sign in using Firebase Auth
+            await auth().signInWithEmailAndPassword(email, password);
 
-            if (snap.empty) {
-                // Wrong credentials
+            // 🔐 At this point Firebase will persist the session on device.
+            // With onAuthStateChanged in RootNavigator, user will stay logged in.
+
+            navigation.reset({
+                index: 0,
+                routes: [{ name: 'HomeTabs' }],
+            });
+        } catch (err: any) {
+            console.warn('Login FirebaseAuth error:', err);
+
+            let msg =
+                'Something went wrong while logging you in. Please try again.';
+
+            if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+                msg = 'Invalid mobile number or password. Please check your details.';
                 setErrors(prev => ({
                     ...prev,
                     pass: 'Invalid mobile number or password.',
                 }));
-                setGlobalError(
-                    'Invalid mobile number or password. Please check your details.',
-                );
-                return;
+            } else if (err.code === 'auth/too-many-requests') {
+                msg = 'Too many attempts. Please wait a few minutes and try again.';
             }
 
-            // ✅ User found – navigate inside app
-            navigation.replace('HomeTabs');
-        } catch (err: any) {
-            console.warn('Login Firestore error:', err);
-            setGlobalError(
-                'Something went wrong while logging you in. Please try again.',
-            );
+            setGlobalError(msg);
         } finally {
             setLoading(false);
         }

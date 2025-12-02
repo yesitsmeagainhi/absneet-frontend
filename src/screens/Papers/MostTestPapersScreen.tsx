@@ -16,9 +16,9 @@ import { useTheme } from '../../theme/ThemeContext';
 import { db } from '../../firebase';
 import {
   collection,
-  getDocs,
   orderBy,
   query,
+  onSnapshot, // 👈 real-time listener
 } from 'firebase/firestore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MockTestPapers'>;
@@ -47,7 +47,7 @@ type SubjectWithMockPapers = {
   papers: SubjectMockPdfDoc[];
 };
 
-const fullExamCol = collection(db, 'mock_full_exam_papers');      // 👈 adjust name if needed
+const fullExamCol = collection(db, 'mock_full_exam_papers');       // 👈 adjust name if needed
 const subjectMocksCol = collection(db, 'mock_subject_mock_papers'); // 👈 adjust name if needed
 
 export default function MockTestPapersScreen({ navigation }: Props) {
@@ -59,75 +59,86 @@ export default function MockTestPapersScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadPapers = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // 🔹 1. Load full exam mock papers
-      const fullQ = query(fullExamCol, orderBy('year', 'desc'));
-      const fullSnap = await getDocs(fullQ);
-
-      const fullList: FullExamPdfDoc[] = fullSnap.docs.map(d => {
-        const data = d.data() as any;
-        return {
-          id: d.id,
-          exam: data.exam ?? 'NEET',
-          year: data.year ?? 0,
-          title: data.title ?? `${data.exam ?? 'NEET'} ${data.year ?? ''} Mock Test`,
-          pdfUrl: data.pdfUrl ?? '',
-        };
-      });
-
-      setFullExamPapers(fullList);
-
-      // 🔹 2. Load subject-wise mock papers
-      const subjQ = query(subjectMocksCol, orderBy('year', 'desc'));
-      const subjSnap = await getDocs(subjQ);
-
-      const subjectDocs: SubjectMockPdfDoc[] = subjSnap.docs.map(d => {
-        const data = d.data() as any;
-        return {
-          id: d.id,
-          subjectId: data.subjectId ?? 'general',
-          subjectName: data.subjectName,
-          exam: data.exam ?? 'NEET',
-          year: data.year ?? 0,
-          title: data.title ?? `${data.exam ?? 'NEET'} ${data.year ?? ''} Mock`,
-          pdfUrl: data.pdfUrl ?? '',
-        };
-      });
-
-      // group by subjectId
-      const bySub: Record<string, SubjectWithMockPapers> = {};
-
-      subjectDocs.forEach(p => {
-        if (!bySub[p.subjectId]) {
-          bySub[p.subjectId] = {
-            subjectId: p.subjectId,
-            subjectName: p.subjectName || p.subjectId.toUpperCase(),
-            papers: [],
-          };
-        }
-        bySub[p.subjectId].papers.push(p);
-      });
-
-      const grouped = Object.values(bySub).map(s => ({
-        ...s,
-        papers: [...s.papers].sort((a, b) => b.year - a.year),
-      }));
-
-      setGroupedSubjectMocks(grouped);
-    } catch (e: any) {
-      console.error('[MockTestPapersScreen] load error', e);
-      setError('Failed to load mock test papers.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // 🔥 Real-time listeners for both collections
   useEffect(() => {
-    loadPapers();
+    setLoading(true);
+    setError(null);
+
+    // 1️⃣ Full exam mock papers
+    const fullQ = query(fullExamCol, orderBy('year', 'desc'));
+    const unsubscribeFull = onSnapshot(
+      fullQ,
+      snap => {
+        const fullList: FullExamPdfDoc[] = snap.docs.map(d => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            exam: data.exam ?? 'NEET',
+            year: data.year ?? 0,
+            title: data.title ?? `${data.exam ?? 'NEET'} ${data.year ?? ''} Mock Test`,
+            pdfUrl: data.pdfUrl ?? '',
+          };
+        });
+
+        setFullExamPapers(fullList);
+        setLoading(false); // at least one section is ready
+      },
+      err => {
+        console.error('[MockTestPapersScreen] fullExam onSnapshot error', err);
+        setError('Failed to load mock test papers.');
+        setLoading(false);
+      },
+    );
+
+    // 2️⃣ Subject-wise mock papers
+    const subjQ = query(subjectMocksCol, orderBy('year', 'desc'));
+    const unsubscribeSubj = onSnapshot(
+      subjQ,
+      snap => {
+        const subjectDocs: SubjectMockPdfDoc[] = snap.docs.map(d => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            subjectId: data.subjectId ?? 'general',
+            subjectName: data.subjectName,
+            exam: data.exam ?? 'NEET',
+            year: data.year ?? 0,
+            title: data.title ?? `${data.exam ?? 'NEET'} ${data.year ?? ''} Mock`,
+            pdfUrl: data.pdfUrl ?? '',
+          };
+        });
+
+        // group by subjectId
+        const bySub: Record<string, SubjectWithMockPapers> = {};
+        subjectDocs.forEach(p => {
+          if (!bySub[p.subjectId]) {
+            bySub[p.subjectId] = {
+              subjectId: p.subjectId,
+              subjectName: p.subjectName || p.subjectId.toUpperCase(),
+              papers: [],
+            };
+          }
+          bySub[p.subjectId].papers.push(p);
+        });
+
+        const grouped = Object.values(bySub).map(s => ({
+          ...s,
+          papers: [...s.papers].sort((a, b) => b.year - a.year),
+        }));
+
+        setGroupedSubjectMocks(grouped);
+      },
+      err => {
+        console.error('[MockTestPapersScreen] subjectMocks onSnapshot error', err);
+        setError('Failed to load subject-wise mock test papers.');
+      },
+    );
+
+    // 🔙 cleanup both listeners on unmount
+    return () => {
+      unsubscribeFull();
+      unsubscribeSubj();
+    };
   }, []);
 
   const openPdf = (title: string, pdfUrl: string) => {
@@ -164,7 +175,7 @@ export default function MockTestPapersScreen({ navigation }: Props) {
           Practice full NEET-style mock tests and subject-wise mock papers in PDF format.
         </Text>
 
-        {/* 🟢 Section 1: Complete Mock Exam – all subjects mixed */}
+        {/* 🟢 Section 1: Complete Mock Exam – all subjects combined */}
         <Text style={styles.sectionHeading}>Complete Exam (All Subjects Combined)</Text>
         <Text style={styles.sectionSub}>
           These mock tests contain Physics, Chemistry and Biology together in one paper,
@@ -178,7 +189,7 @@ export default function MockTestPapersScreen({ navigation }: Props) {
             </Text>
           </View>
         ) : (
-          fullExamPapers.map((paper) => (
+          fullExamPapers.map(paper => (
             <TouchableOpacity
               key={paper.id}
               style={styles.paperRow}
@@ -214,14 +225,14 @@ export default function MockTestPapersScreen({ navigation }: Props) {
         ) : (
           <FlatList
             data={groupedSubjectMocks}
-            keyExtractor={(s) => s.subjectId}
+            keyExtractor={s => s.subjectId}
             scrollEnabled={false}
             contentContainerStyle={{ paddingTop: 8 }}
             renderItem={({ item }) => (
               <View style={styles.subjectBlock}>
                 <Text style={styles.subjectName}>{item.subjectName}</Text>
 
-                {item.papers.map((paper) => (
+                {item.papers.map(paper => (
                   <TouchableOpacity
                     key={paper.id}
                     style={styles.paperRow}
@@ -245,8 +256,7 @@ export default function MockTestPapersScreen({ navigation }: Props) {
     </View>
   );
 }
-
-/** Theme-aware styles */
+// /** Theme-aware styles */
 const createStyles = (isDark: boolean) =>
   StyleSheet.create({
     c: {

@@ -2025,6 +2025,15 @@ import { useTheme } from '../../theme/ThemeContext';
 
 // 🔹 React Native Firebase Firestore
 import firestore from '@react-native-firebase/firestore';
+// 🔹 Firestore (modular) for real-time
+import { db } from '../../firebase';
+import {
+    collection,
+    query,
+    where,
+    orderBy,
+    onSnapshot,
+} from 'firebase/firestore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CustomMCQQuiz'>;
 
@@ -2079,19 +2088,23 @@ export default function CustomMCQQuizScreen({ navigation }: Props) {
     const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>([]);
 
     // -------- LOAD SUBJECTS / UNITS / CHAPTERS FROM FIRESTORE --------
+    // -------- LIVE SUBJECTS / UNITS / CHAPTERS FROM FIRESTORE --------
     useEffect(() => {
-        const loadFromFirestore = async () => {
-            setLoadingMeta(true);
-            try {
-                const nodesCol = firestore().collection('nodes');
+        setLoadingMeta(true);
 
-                // 1️⃣ Subjects
-                const subjectsSnap = await nodesCol
-                    .where('type', '==', 'subject')
-                    .orderBy('order', 'asc')
-                    .get();
+        const nodesCol = collection(db, 'nodes');
 
-                const subjNodes: SubjectNode[] = subjectsSnap.docs.map(d => {
+        // 1️⃣ Live subjects
+        const subjectsQ = query(
+            nodesCol,
+            where('type', '==', 'subject'),
+            orderBy('order', 'asc'),
+        );
+
+        const unsubSubjects = onSnapshot(
+            subjectsQ,
+            snap => {
+                const subjNodes: SubjectNode[] = snap.docs.map(d => {
                     const data = d.data() as any;
                     return {
                         id: d.id,
@@ -2100,13 +2113,22 @@ export default function CustomMCQQuizScreen({ navigation }: Props) {
                         order: data.order ?? 0,
                     };
                 });
+                setSubjects(subjNodes);
+                setLoadingMeta(false); // we can show UI as soon as subjects arrive
+            },
+            err => {
+                console.error('[CustomMCQQuizScreen] subjects onSnapshot error', err);
+                setLoadingMeta(false);
+            },
+        );
 
-                // 2️⃣ Units
-                const unitsSnap = await nodesCol
-                    .where('type', '==', 'unit')
-                    .get();
+        // 2️⃣ Live units
+        const unitsQ = query(nodesCol, where('type', '==', 'unit'));
 
-                const unitNodes: UnitNode[] = unitsSnap.docs.map(d => {
+        const unsubUnits = onSnapshot(
+            unitsQ,
+            snap => {
+                const unitNodes: UnitNode[] = snap.docs.map(d => {
                     const data = d.data() as any;
                     return {
                         id: d.id,
@@ -2117,13 +2139,20 @@ export default function CustomMCQQuizScreen({ navigation }: Props) {
                         order: data.order ?? 0,
                     };
                 });
+                setUnits(unitNodes);
+            },
+            err => {
+                console.error('[CustomMCQQuizScreen] units onSnapshot error', err);
+            },
+        );
 
-                // 3️⃣ Chapters (with questions)
-                const chaptersSnap = await nodesCol
-                    .where('type', '==', 'chapter')
-                    .get();
+        // 3️⃣ Live chapters (with questions)
+        const chaptersQ = query(nodesCol, where('type', '==', 'chapter'));
 
-                const chapNodes: ChapterNode[] = chaptersSnap.docs.map(d => {
+        const unsubChapters = onSnapshot(
+            chaptersQ,
+            snap => {
+                const chapNodes: ChapterNode[] = snap.docs.map(d => {
                     const data = d.data() as any;
                     const rawQs: any[] = Array.isArray(data.questions)
                         ? data.questions
@@ -2149,18 +2178,21 @@ export default function CustomMCQQuizScreen({ navigation }: Props) {
                     };
                 });
 
-                setSubjects(subjNodes);
-                setUnits(unitNodes);
                 setChapters(chapNodes);
-            } catch (e) {
-                console.error('[CustomMCQQuizScreen] Failed to load meta from Firestore', e);
-            } finally {
-                setLoadingMeta(false);
-            }
-        };
+            },
+            err => {
+                console.error('[CustomMCQQuizScreen] chapters onSnapshot error', err);
+            },
+        );
 
-        loadFromFirestore();
+        // 🔙 cleanup all listeners on unmount
+        return () => {
+            unsubSubjects();
+            unsubUnits();
+            unsubChapters();
+        };
     }, []);
+
 
     // When subjects change: keep only units that still belong to selected subjects
     useEffect(() => {

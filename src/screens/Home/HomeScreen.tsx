@@ -2023,6 +2023,11 @@ export default function HomeScreen() {
   const [subjects, setSubjects] = useState<SubjectItem[]>([]);
   const [subjectsLoading, setSubjectsLoading] = useState(true);
   const [subjectsError, setSubjectsError] = useState<string | null>(null);
+  // 🔹 Internal raw snapshot data for combining subjects + unitCounts
+  const [rawSubjects, setRawSubjects] = useState<
+    { id: string; data: any }[]
+  >([]);
+  const [unitCounts, setUnitCounts] = useState<Record<string, number>>({});
 
   // 🔹 Banners from Firestore (nodes, type = 'banner')
   const [banners, setBanners] = useState<BannerItem[]>([]);
@@ -2053,38 +2058,76 @@ export default function HomeScreen() {
   const [introStep, setIntroStep] = useState(0); // index in INTRO_STEPS
 
   // 🔥 Load subjects + unit counts from Firestore
+  // 🔥 REAL-TIME subjects + unit counts from Firestore
   useEffect(() => {
-    const loadSubjects = async () => {
-      try {
-        setSubjectsLoading(true);
-        setSubjectsError(null);
+    console.log('[HOME] subscribing to live subjects + units...');
+    setSubjectsLoading(true);
+    setSubjectsError(null);
 
-        console.log('[HOME] loading subjects and units from Firestore...');
+    const nodesRef = db.collection('nodes');
 
-        const nodesRef = db.collection('nodes');
+    // 1️⃣ Live units → build subjectId -> count map
+    const unsubscribeUnits = nodesRef
+      .where('type', '==', 'unit')
+      .onSnapshot(
+        snapshot => {
+          const counts: Record<string, number> = {};
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data() as any;
+            const parentId = data.parentId as string | undefined;
+            if (!parentId) return;
+            counts[parentId] = (counts[parentId] ?? 0) + 1;
+          });
 
-        // 1️⃣ subjects
-        const subjectsSnap = await nodesRef
-          .where('type', '==', 'subject')
-          .orderBy('order', 'asc')
-          .get();
+          setUnitCounts(counts);
+          console.log('[HOME] unitCounts =', counts);
+        },
+        error => {
+          console.warn('[HOME] units onSnapshot error', error);
+        },
+      );
 
-        // 2️⃣ units
-        const unitsSnap = await nodesRef
-          .where('type', '==', 'unit')
-          .get();
+    // 2️⃣ Live subjects
+    const unsubscribeSubjects = nodesRef
+      .where('type', '==', 'subject')
+      .orderBy('order', 'asc')
+      .onSnapshot(
+        snapshot => {
+          console.log('[HOME] subjects snapshot size =', snapshot.size);
 
-        // 3️⃣ subjectId -> unitCount
-        const unitCounts: Record<string, number> = {};
-        unitsSnap.forEach(docSnap => {
-          const data = docSnap.data() as any;
-          const parentId = data.parentId as string | undefined;
-          if (!parentId) return;
-          unitCounts[parentId] = (unitCounts[parentId] ?? 0) + 1;
-        });
+          if (snapshot.empty) {
+            console.log('[HOME] no Firestore subjects, using demo SUBJECTS');
 
-        if (subjectsSnap.empty) {
-          console.log('[HOME] no Firestore subjects, using demo SUBJECTS');
+            // 🔁 fallback to local demo data
+            const demoSubjects: SubjectItem[] = SUBJECTS.map((s, idx) => ({
+              id: s.id,
+              name: s.name,
+              order: idx,
+              unitCount: s.units?.length ?? 0,
+            }));
+
+            setRawSubjects([]);
+            setSubjects(demoSubjects);
+            setSubjectsLoading(false);
+            return;
+          }
+
+          const docs = snapshot.docs.map(docSnap => ({
+            id: docSnap.id,
+            data: docSnap.data() as any,
+          }));
+
+          setRawSubjects(docs);
+          setSubjectsLoading(false);
+        },
+        error => {
+          console.warn(
+            '[HOME] subjects onSnapshot error, falling back to demo SUBJECTS',
+            error,
+          );
+          setSubjectsError(
+            'Failed to load subjects from cloud. Showing demo data.',
+          );
 
           const demoSubjects: SubjectItem[] = SUBJECTS.map((s, idx) => ({
             id: s.id,
@@ -2093,45 +2136,38 @@ export default function HomeScreen() {
             unitCount: s.units?.length ?? 0,
           }));
 
+          setRawSubjects([]);
           setSubjects(demoSubjects);
-        } else {
-          const items: SubjectItem[] = subjectsSnap.docs.map(docSnap => {
-            const data = docSnap.data() as any;
-            const id = docSnap.id;
-            return {
-              id,
-              name: data.name ?? data.title ?? 'Untitled subject',
-              order: data.order ?? 0,
-              slug: data.slug,
-              active: data.active ?? true,
-              unitCount: unitCounts[id] ?? 0,
-            };
-          });
+          setSubjectsLoading(false);
+        },
+      );
 
-          setSubjects(items);
-          console.log('[HOME] subjects loaded:', items.length);
-        }
-      } catch (err) {
-        console.warn(
-          '[HOME] Failed to load subjects from Firestore, using demo data',
-          err,
-        );
-        setSubjectsError('Failed to load subjects from cloud. Showing demo data.');
-
-        const demoSubjects: SubjectItem[] = SUBJECTS.map((s, idx) => ({
-          id: s.id,
-          name: s.name,
-          order: idx,
-          unitCount: s.units?.length ?? 0,
-        }));
-        setSubjects(demoSubjects);
-      } finally {
-        setSubjectsLoading(false);
-      }
+    // 🔙 Clean up listeners when HomeScreen unmounts
+    return () => {
+      console.log('[HOME] unsubscribing from live subjects + units');
+      unsubscribeUnits();
+      unsubscribeSubjects();
     };
-
-    loadSubjects();
   }, []);
+  // 🔁 Whenever rawSubjects or unitCounts change, build final subjects list
+  useEffect(() => {
+    if (!rawSubjects.length) {
+      // When we are using demo subjects or no Firestore subjects,
+      // subjects are already set in the onSnapshot callback.
+      return;
+    }
+
+    const items: SubjectItem[] = rawSubjects.map(({ id, data }, idx) => ({
+      id,
+      name: data.name ?? data.title ?? 'Untitled subject',
+      order: data.order ?? idx,
+      slug: data.slug,
+      active: data.active ?? true,
+      unitCount: unitCounts[id] ?? 0,
+    }));
+
+    setSubjects(items);
+  }, [rawSubjects, unitCounts]);
 
   // 🔥 REAL-TIME banners from Firestore (nodes type = 'banner')
   useEffect(() => {

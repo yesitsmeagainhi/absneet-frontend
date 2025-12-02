@@ -1,3 +1,5 @@
+
+
 // src/screens/Auth/SignUpScreen.tsx
 import React, { useState, useMemo } from 'react';
 import {
@@ -19,6 +21,9 @@ import { RootStackParamList } from '../../navigation/rootnavigator';
 // 🔹 Firestore imports
 import firestore from '@react-native-firebase/firestore';
 import { db } from '../../services/firebase.native';
+
+// ✅ Firebase Auth
+import auth from '@react-native-firebase/auth';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
 
@@ -117,17 +122,14 @@ export default function SignUpScreen({ navigation }: Props) {
       let message: string;
 
       if (errorCount === 1) {
-        // If only one field is wrong, show that exact message
         const onlyError = (Object.values(newErrors)[0] as string) || '';
         message = onlyError || 'Please correct the highlighted field.';
       } else {
-        // If multiple fields are wrong, show general message
         message =
           'Some details look incorrect. Please correct the fields or check your input.';
       }
 
-      // setGlobalError(message);
-      // Alert.alert('Check your details', message);
+      setGlobalError(message);
       return false;
     }
 
@@ -138,14 +140,27 @@ export default function SignUpScreen({ navigation }: Props) {
   const handleSignUp = async () => {
     if (!validate()) return;
 
+    const mobile = number.trim();
+    const password = pass.trim();
+    const education = edu.trim();
+    const cityName = city.trim();
+
+    // ✅ synthetic email for Firebase Auth
+    const email = `${mobile}@absneet.app`;
+
     try {
       setLoading(true);
 
-      await db.collection('authentication').add({
-        mobile: number.trim(),
-        password: pass.trim(), // ⚠️ For real apps use Firebase Auth or hashing
-        education: edu.trim(),
-        city: city.trim(),
+      // 1️⃣ Create user in Firebase Auth
+      const cred = await auth().createUserWithEmailAndPassword(email, password);
+      const { uid } = cred.user;
+
+      // 2️⃣ Save profile in Firestore (users/{uid})
+      await db.collection('users').doc(uid).set({
+        uid,
+        mobile,
+        education,
+        city: cityName,
         createdAt: firestore.FieldValue.serverTimestamp(),
       });
 
@@ -153,13 +168,25 @@ export default function SignUpScreen({ navigation }: Props) {
       setErrors({});
       setGlobalError(null);
 
-      navigation.replace('HomeTabs');
+      // 3️⃣ Navigate into app
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'HomeTabs' }],
+      });
     } catch (err: any) {
-      console.warn('SignUp Firestore error:', err);
-      Alert.alert(
-        'Sign up failed',
-        err?.message || 'Something went wrong while creating your account.',
-      );
+      console.warn('SignUp FirebaseAuth/Firestore error:', err);
+
+      let msg =
+        'Something went wrong while creating your account. Please try again.';
+
+      if (err.code === 'auth/email-already-in-use') {
+        msg = 'An account with this mobile number already exists. Please login.';
+      } else if (err.code === 'auth/weak-password') {
+        msg = 'Password is too weak. Please use at least 6 characters.';
+      }
+
+      setGlobalError(msg);
+      Alert.alert('Sign up failed', msg);
     } finally {
       setLoading(false);
     }
@@ -287,7 +314,6 @@ export default function SignUpScreen({ navigation }: Props) {
                 value={city}
                 onFocus={() => setShowCitySuggestions(true)}
                 onBlur={() => {
-                  // slight delay so press on suggestion still works
                   setTimeout(() => setShowCitySuggestions(false), 150);
                 }}
                 onChangeText={txt => {
@@ -350,7 +376,6 @@ export default function SignUpScreen({ navigation }: Props) {
     </SafeAreaView>
   );
 }
-
 const GREEN = '#22C55E';
 const PURPLE = '#4F46E5';
 

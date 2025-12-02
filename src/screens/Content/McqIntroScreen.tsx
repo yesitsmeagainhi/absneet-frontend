@@ -143,7 +143,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 
 import { db } from '../../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 import { useTheme } from '../../theme/ThemeContext';
 
@@ -174,38 +174,43 @@ export default function McqIntroScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+    if (!chapterId) {
+      setError('No chapter selected.');
+      setChapter(null);
+      setLoading(false);
+      return;
+    }
 
-        if (!chapterId) {
-          setError('No chapter selected.');
-          setLoading(false);
-          return;
-        }
+    setLoading(true);
+    setError(null);
 
-        // 🔹 Fetch chapter doc from Firestore: nodes/{chapterId}
-        const ref = doc(db, 'nodes', chapterId);
-        const snap = await getDoc(ref);
+    // 🔹 Live listener on nodes/{chapterId}
+    const ref = doc(db, 'nodes', chapterId);
 
+    const unsubscribe = onSnapshot(
+      ref,
+      snap => {
         if (!snap.exists()) {
           setError('Chapter not found.');
           setChapter(null);
         } else {
+          setError(null);
           setChapter(snap.data() as ChapterDoc);
         }
-      } catch (e: any) {
-        console.error('[McqIntroScreen] load error', e);
+        setLoading(false);
+      },
+      err => {
+        console.error('[McqIntroScreen] onSnapshot error', err);
         setError('Failed to load MCQs.');
         setChapter(null);
-      } finally {
         setLoading(false);
-      }
-    };
+      },
+    );
 
-    load();
+    // 🔙 cleanup when screen unmounts / chapterId changes
+    return () => unsubscribe();
   }, [chapterId]);
+
 
   // ---------- States ----------
   if (loading) {

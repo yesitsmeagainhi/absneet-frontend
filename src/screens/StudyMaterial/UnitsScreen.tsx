@@ -167,7 +167,9 @@
 //         alignItems: 'center',
 //         justifyContent: 'center',
 //     },
-// });// src/screens/MCQ/UnitsScreen.tsx
+// });
+// 
+// src/screens/MCQ/UnitsScreen.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     View,
@@ -206,31 +208,31 @@ export default function UnitsScreen({ route, navigation }: Props) {
     const [units, setUnits] = useState<UnitDoc[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [subjectName, setSubjectName] = useState<string>('');
 
+    // ───────────────── Units realtime listener ─────────────────
     useEffect(() => {
-        let isMounted = true;
+        if (!subjectId) {
+            setUnits([]);
+            setLoading(false);
+            return;
+        }
 
-        const loadUnitsFromFirestore = async () => {
-            setLoading(true);
-            setError(null);
+        setLoading(true);
+        setError(null);
 
-            console.log('[UnitsScreen] subjectId from route =', subjectId);
+        const col = firestore().collection('nodes');
 
-            try {
-                const col = firestore().collection('nodes');
+        const q = col
+            .where('type', '==', 'unit')
+            .where('parentId', '==', subjectId)
+            .orderBy('order', 'asc');
 
-                // main query
-                const q = col
-                    .where('type', '==', 'unit')
-                    .where('parentId', '==', subjectId)
-                    .orderBy('order', 'asc');
+        console.log('[UnitsScreen] attaching snapshot for parentId =', subjectId);
 
-                console.log('[UnitsScreen] running query for parentId =', subjectId);
-                const snap = await q.get();
-
-                if (!isMounted) return;
-
-                let rows: UnitDoc[] = snap.docs.map(d => {
+        const unsubscribe = q.onSnapshot(
+            snap => {
+                const rows: UnitDoc[] = snap.docs.map(d => {
                     const data = d.data() as any;
                     return {
                         id: d.id,
@@ -244,26 +246,22 @@ export default function UnitsScreen({ route, navigation }: Props) {
                     };
                 });
 
-                console.log('[UnitsScreen] fetched units =', rows.length, rows);
+                console.log('[UnitsScreen] snapshot units =', rows.length, rows);
                 setUnits(rows);
-            } catch (e: any) {
-                console.error('[UnitsScreen] error loading units', e);
+                setLoading(false);
+            },
+            err => {
+                console.error('[UnitsScreen] snapshot error', err);
                 setError('Failed to load units. Please try again.');
-            } finally {
-                if (isMounted) {
-                    setLoading(false);
-                }
-            }
-        };
+                setLoading(false);
+            },
+        );
 
-        loadUnitsFromFirestore();
-
-        return () => {
-            isMounted = false;
-        };
+        // ✅ clean up listener when screen unmounts / subjectId changes
+        return unsubscribe;
     }, [subjectId]);
-    const [subjectName, setSubjectName] = useState<string>('');
 
+    // ───────────────── Subject meta (one-time fetch) ─────────────────
     useEffect(() => {
         const loadSubjectMeta = async () => {
             try {
@@ -285,6 +283,7 @@ export default function UnitsScreen({ route, navigation }: Props) {
 
         loadSubjectMeta();
     }, [subjectId]);
+
     const handlePressUnit = (unit: UnitDoc) => {
         navigation.navigate('Chapters', {
             subjectId,
@@ -332,9 +331,7 @@ export default function UnitsScreen({ route, navigation }: Props) {
                         onPress={() => handlePressUnit(item)}
                     >
                         <Text style={styles.unitIndex}>
-                            {subjectName
-                                ? `${subjectName}`        // e.g. "Physics"
-                                : `Unit ${index + 1}`}    
+                            {subjectName ? `${subjectName}` : `Unit ${index + 1}`}
                         </Text>
                         <Text style={styles.unitName}>{item.name}</Text>
                     </TouchableOpacity>
@@ -351,19 +348,17 @@ export default function UnitsScreen({ route, navigation }: Props) {
         </View>
     );
 }
+
 /**
  * Themed styles – dark by default, flip when isDark = false
  */
 const createStyles = (isDark: boolean) =>
     StyleSheet.create({
-        // main screen wrapper
         c: {
             flex: 1,
             padding: 16,
             backgroundColor: isDark ? '#0F172A' : '#F9FAFB',
         },
-
-        // unit card
         row: {
             paddingVertical: 14,
             paddingHorizontal: 12,
@@ -384,8 +379,6 @@ const createStyles = (isDark: boolean) =>
             color: isDark ? '#F9FAFB' : '#111827',
             fontWeight: '600',
         },
-
-        // loading / error / empty
         center: {
             flex: 1,
             padding: 16,
@@ -405,8 +398,6 @@ const createStyles = (isDark: boolean) =>
             color: '#F97373',
             textAlign: 'center',
         },
-
-        // Floating Home button
         fab: {
             position: 'absolute',
             bottom: 24,

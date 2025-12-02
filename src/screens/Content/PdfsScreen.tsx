@@ -113,9 +113,7 @@
 //         alignItems: 'center' as const,
 //         justifyContent: 'center' as const,
 //     },
-// };
-
-// src/screens/Content/PdfsScreen.tsx
+// };// src/screens/Content/PdfsScreen.tsx 
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     View,
@@ -128,8 +126,11 @@ import {
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
-import firestore from '@react-native-firebase/firestore';
 import { useTheme } from '../../theme/ThemeContext';
+
+// ✅ use web Firestore SDK with onSnapshot
+import { db } from '../../firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -162,34 +163,37 @@ export default function PdfsScreen() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // 🔥 Load chapter + PDFs from Firestore
+    // 🔥 Live listener for chapter + PDFs from Firestore
     useEffect(() => {
-        const load = async () => {
-            console.log('[PdfsScreen] route params =', {
-                subjectId,
-                unitId,
-                chapterId,
-            });
+        console.log('[PdfsScreen] route params =', {
+            subjectId,
+            unitId,
+            chapterId,
+        });
 
-            if (!subjectId || !unitId || !chapterId) {
-                setError('Missing chapter selection.');
-                setLoading(false);
-                return;
-            }
+        if (!subjectId || !unitId || !chapterId) {
+            setError('Missing chapter selection.');
+            setLoading(false);
+            return;
+        }
 
-            try {
-                setLoading(true);
-                setError(null);
+        setLoading(true);
+        setError(null);
 
-                const docRef = firestore().collection('nodes').doc(chapterId);
-                console.log('[PdfsScreen] fetching chapter doc =', docRef.path);
+        const ref = doc(db, 'nodes', chapterId);
+        console.log('[PdfsScreen] subscribing to doc =', ref.path);
 
-                const snap = await docRef.get();
-
-                if (!snap.exists) {
-                    console.log('[PdfsScreen] chapter doc NOT found for id =', chapterId);
+        const unsubscribe = onSnapshot(
+            ref,
+            snap => {
+                if (!snap.exists()) {
+                    console.log(
+                        '[PdfsScreen] chapter doc NOT found for id =',
+                        chapterId,
+                    );
                     setError('Chapter not found. Please try again later.');
                     setPdfs([]);
+                    setLoading(false);
                     return;
                 }
 
@@ -213,20 +217,30 @@ export default function PdfsScreen() {
                 }
 
                 const arr = Array.isArray(data.pdfs) ? data.pdfs : [];
-                console.log('[PdfsScreen] pdfs array length =', arr.length, 'pdfs =', arr);
+                console.log(
+                    '[PdfsScreen] pdfs array length =',
+                    arr.length,
+                    'pdfs =',
+                    arr,
+                );
 
                 setChapterName(data.name || 'Chapter PDFs');
                 setPdfs(arr);
-            } catch (e: any) {
-                console.error('[PdfsScreen] Firestore load error', e);
+                setLoading(false);
+            },
+            err => {
+                console.error('[PdfsScreen] Firestore onSnapshot error', err);
                 setError('Failed to load PDFs from cloud.');
                 setPdfs([]);
-            } finally {
                 setLoading(false);
-            }
-        };
+            },
+        );
 
-        load();
+        // 🔙 cleanup listener when screen unmounts or params change
+        return () => {
+            console.log('[PdfsScreen] unsubscribing from doc listener');
+            unsubscribe();
+        };
     }, [subjectId, unitId, chapterId]);
 
     // ─── UI states ────────────────────────────────────────────────
@@ -276,7 +290,6 @@ export default function PdfsScreen() {
                                 activeOpacity={0.85}
                                 onPress={() => {
                                     console.log('[PdfsScreen] open PDF', item);
-                                    // 🧭 Navigate to stack-level PDF viewer
                                     const parent = (rootNav as any).getParent?.();
                                     (parent || rootNav).navigate('PDFViewer', {
                                         title: item.title || `PDF ${index + 1}`,
@@ -302,6 +315,7 @@ export default function PdfsScreen() {
         </View>
     );
 }
+
 
 /** Theme-aware styles – dark by default, flip when isDark=false */
 const createStyles = (isDark: boolean) =>

@@ -256,8 +256,6 @@
 //     },
 //   });
 
-
-
 // src/screens/MCQ/SelectUnitsOrChaptersScreen.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -272,20 +270,25 @@ import { RootStackParamList } from '../../navigation/RootNavigator';
 
 import { useTheme } from '../../theme/ThemeContext';
 
-// 🔹 Firestore (same style as other Firestore-based screens)
+// 🔹 Firestore (modular, real-time)
 import { db } from '../../firebase';
 import {
   doc,
-  getDoc,
   collection,
   query,
   where,
-  getDocs,
+  onSnapshot,
 } from 'firebase/firestore';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'SelectUnitsOrChapters'>;
+type Props = NativeStackScreenProps<
+  RootStackParamList,
+  'SelectUnitsOrChapters'
+>;
 
-export default function SelectUnitsOrChaptersScreen({ route, navigation }: Props) {
+export default function SelectUnitsOrChaptersScreen({
+  route,
+  navigation,
+}: Props) {
   const subjectId = route.params?.subjectId ?? '';
 
   const { isDark } = useTheme();
@@ -303,51 +306,67 @@ export default function SelectUnitsOrChaptersScreen({ route, navigation }: Props
       return;
     }
 
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+    setLoading(true);
+    setError(null);
 
-        // 1️⃣ Load subject doc: nodes/<subjectId>
-        const ref = doc(db, 'nodes', subjectId);
-        const snap = await getDoc(ref);
-
+    // 🔹 Subject doc listener
+    const subjectRef = doc(db, 'nodes', subjectId);
+    const unsubSubject = onSnapshot(
+      subjectRef,
+      snap => {
         if (!snap.exists()) {
           setError('Subject not found.');
           setSubjectName('');
           setUnitsCount(0);
+          setLoading(false);
           return;
         }
 
         const data = snap.data() as any;
         const name = data.name ?? 'Selected subject';
         setSubjectName(name);
-
-        // 2️⃣ Count units for this subject
-        //    (matches admin UnitsPage: type='unit', parentId = subjectId)
-        const qUnits = query(
-          collection(db, 'nodes'),
-          where('type', '==', 'unit'),
-          where('parentId', '==', subjectId),
-        );
-
-        const unitsSnap = await getDocs(qUnits);
-        setUnitsCount(unitsSnap.size || 0);
-      } catch (e: any) {
-        console.error('[SelectUnitsOrChapters] Firestore load error', e);
-        if (e?.code === 'failed-precondition') {
+        setLoading(false); // we can show screen once subject is known
+      },
+      err => {
+        console.error('[SelectUnitsOrChapters] subject onSnapshot error', err);
+        if ((err as any)?.code === 'failed-precondition') {
           setError(
-            'Firestore index missing for (type, parentId). Please create the composite index in console.'
+            'Firestore index missing for this query. Please create the index in console.'
           );
         } else {
           setError('Failed to load subject details.');
         }
-      } finally {
         setLoading(false);
-      }
-    };
+      },
+    );
 
-    load();
+    // 🔹 Units count listener: type='unit', parentId = subjectId
+    const unitsQ = query(
+      collection(db, 'nodes'),
+      where('type', '==', 'unit'),
+      where('parentId', '==', subjectId),
+    );
+
+    const unsubUnits = onSnapshot(
+      unitsQ,
+      snap => {
+        setUnitsCount(snap.size || 0);
+      },
+      err => {
+        console.error('[SelectUnitsOrChapters] units onSnapshot error', err);
+        if ((err as any)?.code === 'failed-precondition') {
+          setError(
+            'Firestore index missing for (type, parentId). Please create the composite index in console.'
+          );
+        }
+      },
+    );
+
+    // 🔙 Cleanup listeners on unmount / subject change
+    return () => {
+      unsubSubject();
+      unsubUnits();
+    };
   }, [subjectId]);
 
   const handleStartFullSubjectQuiz = () => {
@@ -355,11 +374,14 @@ export default function SelectUnitsOrChaptersScreen({ route, navigation }: Props
 
     navigation.navigate('MCQQuiz', {
       subjectId,
-      // This title will be shown on MCQQuizScreen & ResultScreen
       title: subjectName
         ? `${subjectName} – Full Subject MCQ`
         : 'Full Subject MCQ',
     });
+  };
+
+  const handleGoToChapterSelection = () => {
+    navigation.navigate('Units', { subjectId });
   };
 
   // 🔹 No subjectId passed at all
@@ -385,9 +407,7 @@ export default function SelectUnitsOrChaptersScreen({ route, navigation }: Props
     return (
       <View style={styles.center}>
         <ActivityIndicator color={isDark ? '#E5E7EB' : '#4B5563'} />
-        <Text style={styles.loadingText}>
-          Loading subject details…
-        </Text>
+        <Text style={styles.loadingText}>Loading subject details…</Text>
       </View>
     );
   }

@@ -1,25 +1,5 @@
-// import React from 'react';
-// import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-// import { NativeStackScreenProps } from '@react-navigation/native-stack';
-// import { RootStackParamList } from '../../navigation/RootNavigator';
-
-
-// export default function SubjectDetailScreen({ route, navigation }: NativeStackScreenProps<RootStackParamList, 'SubjectDetail'>) {
-//     const { subjectId } = route.params;
-//     return (
-//         <View style={styles.c}>
-//             <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Units', { subjectId })}>
-//                 <Text>Study Material</Text>
-//             </TouchableOpacity>
-//             <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('SelectUnitsOrChapters', { subjectId })}>
-//                 <Text>Solve MCQ</Text>
-//             </TouchableOpacity>
-//         </View>
-//     );
-// }
-// const styles = StyleSheet.create({ c: { flex: 1, padding: 16, gap: 12 }, card: { borderWidth: 1, borderColor: '#ddd', padding: 16, borderRadius: 12 } });
 // src/screens/Subject/SubjectDetailScreen.tsx
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -29,17 +9,73 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 import { SUBJECTS, Subject } from '../../data/demo';
-import { useTheme } from '../../theme/ThemeContext';  // ✅ import theme
+import { useTheme } from '../../theme/ThemeContext';
+
+// 🔹 Firestore (React Native Firebase)
+import firestore, {
+    FirebaseFirestoreTypes,
+} from '@react-native-firebase/firestore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SubjectDetail'>;
 
+type SubjectDoc = {
+    id: string;
+    name: string;
+    order?: number;
+    active?: boolean;
+    createdAt?: FirebaseFirestoreTypes.Timestamp | null;
+};
+
 export default function SubjectDetailScreen({ route, navigation }: Props) {
     const { subjectId } = route.params;
-    const { isDark } = useTheme();                           // ✅ read global theme
-    const styles = useMemo(() => createStyles(isDark), [isDark]); // ✅ recompute on toggle
+    const { isDark } = useTheme();
+    const styles = useMemo(() => createStyles(isDark), [isDark]);
 
-    const subject: Subject | undefined = SUBJECTS.find(s => s.id === subjectId);
-    const subjectName = subject?.name ?? 'Subject';
+    // 🔹 State from Firestore
+    const [subjectDoc, setSubjectDoc] = useState<SubjectDoc | null>(null);
+
+    // 🔹 Fallback demo subject (from SUBJECTS array)
+    const fallbackSubject: Subject | undefined = SUBJECTS.find(
+        s => s.id === subjectId,
+    );
+
+    // 🔥 LIVE snapshot for this subject
+    useEffect(() => {
+        if (!subjectId) return;
+
+        const ref = firestore().collection('nodes').doc(subjectId);
+
+        const unsubscribe = ref.onSnapshot(
+            snap => {
+                if (!snap.exists) {
+                    console.log('[SubjectDetail] subject doc not found, using demo fallback');
+                    setSubjectDoc(null);
+                    return;
+                }
+
+                const data = snap.data() as any;
+                setSubjectDoc({
+                    id: snap.id,
+                    name: data.name ?? data.title ?? 'Subject',
+                    order: data.order,
+                    active: data.active,
+                    createdAt: data.createdAt ?? null,
+                });
+            },
+            err => {
+                console.log('[SubjectDetail] onSnapshot error', err);
+                // keep any previous value, don’t crash; demo fallback will still work
+            },
+        );
+
+        return () => {
+            unsubscribe();
+        };
+    }, [subjectId]);
+
+    // 🔹 Decide final subject name (Firestore → demo → generic)
+    const subjectName =
+        subjectDoc?.name ?? fallbackSubject?.name ?? 'Subject';
 
     return (
         <View style={styles.screen}>
@@ -51,6 +87,19 @@ export default function SubjectDetailScreen({ route, navigation }: Props) {
                     <Text style={styles.headerSubtitle}>
                         Choose how you want to study this subject.
                     </Text>
+
+                    {/* Optional: show if subject is inactive */}
+                    {subjectDoc && subjectDoc.active === false && (
+                        <Text
+                            style={{
+                                marginTop: 6,
+                                fontSize: 11,
+                                color: '#F97316',
+                            }}
+                        >
+                            This subject is currently marked as inactive.
+                        </Text>
+                    )}
                 </View>
 
                 {/* Actions */}
@@ -194,45 +243,3 @@ const createStyles = (isDark: boolean) =>
             color: isDark ? '#9CA3AF' : '#6B7280',
         },
     });
-
-
-//Without themed UI
-// // src/screens/SubjectDetailScreen.tsx
-// import React from 'react';
-// import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-// import { NativeStackScreenProps } from '@react-navigation/native-stack';
-// import { RootStackParamList } from '../../navigation/RootNavigator';
-
-// type Props = NativeStackScreenProps<RootStackParamList, 'SubjectDetail'>;
-
-// export default function SubjectDetailScreen({ route, navigation }: Props) {
-//     const { subjectId } = route.params;
-
-//     return (
-//         <View style={styles.c}>
-//             <TouchableOpacity
-//                 style={styles.card}
-//                 onPress={() => navigation.navigate('Units', { subjectId })}
-//             >
-//                 <Text>Study Material</Text>
-//             </TouchableOpacity>
-
-//             <TouchableOpacity
-//                 style={styles.card}
-//                 onPress={() => navigation.navigate('SelectUnitsOrChapters', { subjectId })}
-//             >
-//                 <Text>Solve MCQ</Text>
-//             </TouchableOpacity>
-//         </View>
-//     );
-// }
-
-// const styles = StyleSheet.create({
-//     c: { flex: 1, padding: 16, gap: 12 },
-//     card: {
-//         borderWidth: 1,
-//         borderColor: '#ddd',
-//         padding: 16,
-//         borderRadius: 12,
-//     },
-// });

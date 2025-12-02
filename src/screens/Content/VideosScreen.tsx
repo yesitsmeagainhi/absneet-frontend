@@ -141,7 +141,10 @@
 //         alignItems: 'center' as const,
 //         justifyContent: 'center' as const,
 //     },
-// };// src/screens/Content/VideosScreen.tsx
+// };
+// 
+
+// src/screens/Content/VideosScreen.tsx 
 import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
@@ -153,12 +156,13 @@ import {
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import firestore, {
-  FirebaseFirestoreTypes,
-} from '@react-native-firebase/firestore';
 
 import { RootStackParamList } from '../../navigation/RootNavigator';
 import { useTheme } from '../../theme/ThemeContext';
+
+// ✅ use the modular Firestore SDK with onSnapshot
+import { db } from '../../firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -190,34 +194,37 @@ export default function VideosScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 🔥 Load chapter + videos from Firestore
+  // 🔥 Live listener: chapter + videos from Firestore
   useEffect(() => {
-    const load = async () => {
-      console.log('[VideosScreen] route params =', {
-        subjectId,
-        unitId,
-        chapterId,
-      });
+    console.log('[VideosScreen] route params =', {
+      subjectId,
+      unitId,
+      chapterId,
+    });
 
-      if (!subjectId || !unitId || !chapterId) {
-        setError('Missing chapter selection.');
-        setLoading(false);
-        return;
-      }
+    if (!subjectId || !unitId || !chapterId) {
+      setError('Missing chapter selection.');
+      setLoading(false);
+      return;
+    }
 
-      try {
-        setLoading(true);
-        setError(null);
+    setLoading(true);
+    setError(null);
 
-        const docRef = firestore().collection('nodes').doc(chapterId);
-        console.log('[VideosScreen] fetching chapter doc =', docRef.path);
+    const ref = doc(db, 'nodes', chapterId as string);
+    console.log('[VideosScreen] subscribing to chapter doc =', ref.path);
 
-        const snap = await docRef.get();
-
-        if (!snap.exists) {
-          console.log('[VideosScreen] chapter doc NOT found for id =', chapterId);
+    const unsubscribe = onSnapshot(
+      ref,
+      snap => {
+        if (!snap.exists()) {
+          console.log(
+            '[VideosScreen] chapter doc NOT found for id =',
+            chapterId,
+          );
           setError('Chapter not found. Please try again later.');
           setVideos([]);
+          setLoading(false);
           return;
         }
 
@@ -250,16 +257,21 @@ export default function VideosScreen() {
 
         setChapterName(data.name || 'Chapter Videos');
         setVideos(arr);
-      } catch (e: any) {
-        console.error('[VideosScreen] Firestore load error', e);
+        setLoading(false);
+      },
+      err => {
+        console.error('[VideosScreen] Firestore onSnapshot error', err);
         setError('Failed to load videos from cloud.');
         setVideos([]);
-      } finally {
         setLoading(false);
-      }
-    };
+      },
+    );
 
-    load();
+    // 🔙 cleanup listener when screen unmounts / params change
+    return () => {
+      console.log('[VideosScreen] unsubscribing from chapter listener');
+      unsubscribe();
+    };
   }, [subjectId, unitId, chapterId]);
 
   // ─── UI states ────────────────────────────────────────────────
@@ -333,7 +345,6 @@ export default function VideosScreen() {
     </View>
   );
 }
-
 /** Theme-aware styles */
 const createStyles = (isDark: boolean) =>
   StyleSheet.create({
