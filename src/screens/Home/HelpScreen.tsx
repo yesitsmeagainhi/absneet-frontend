@@ -1,5 +1,4 @@
-// src/screens/Help/HelpScreen.tsx
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -17,27 +16,31 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'; // ✅ use safe-area-context
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/rootnavigator';
 import { useTheme } from '../../theme/ThemeContext';
 
-// --------- Admin contact shown in the UI ----------
-const PHONE = '+91XXXXXXXXXX';
-const EMAIL = 'support@example.com';
-const ADDRESS_LINE =
-    'ABS Educational Solution, MINI MARKET \nBUILDING, 104-106, BP Rd, beside BASSEIN CATHOLIC BANK, Bhayandar, Venkateshwar Nagar, Bhayandar East, Mumbai, Mira Bhayandar, Maharashtra 401105';
-const MAP_Q = encodeURIComponent(ADDRESS_LINE);
-
-// 🔹 Apps Script config (fill with your real values)
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/...';
-const APPS_SCRIPT_TOKEN = '';
+// 🔹 Apps Script config (no change)
+const APPS_SCRIPT_URL =
+    'https://script.google.com/macros/s/AKfycbxeOPmGJnsmS2oc3YxSb39LLwAzkwvsSJla061FPNTgpaOrrWXjRRAE2CysxEJaCro/exec';
+const APPS_SCRIPT_TOKEN = 'secure@009';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Help'>;
 
 const ACCENT = '#6D28D9';
 
-export default function HelpScreen({ }: Props) {
+type ContactConfig = {
+    type?: string;
+    supportPhone?: string;
+    whatsappPhone?: string;
+    supportEmail?: string;
+    officeAddress?: string;
+    officeHours?: string;
+    mapsQueryOverride?: string;
+};
+
+export default function HelpScreen({}: Props) {
     const insets = useSafeAreaInsets();
     const { width } = useWindowDimensions();
     const scale = Math.min(Math.max(width / 390, 0.9), 1.12);
@@ -46,10 +49,75 @@ export default function HelpScreen({ }: Props) {
     const styles = useMemo(() => createStyles(isDark), [isDark]);
     const placeholderColor = isDark ? '#6B7280' : '#9CA3AF';
 
+    // 🔹 Contact config from Firestore
+    const [contactCfg, setContactCfg] = useState<ContactConfig>({});
+    const [contactLoading, setContactLoading] = useState(true);
+    const [contactError, setContactError] = useState<string | null>(null);
+
+    // 🔹 Form state
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
+
+    // ✅ Subscribe to Firestore `nodes/contactInfo` in real-time
+    useEffect(() => {
+        const ref = firestore().collection('nodes').doc('contactInfo');
+
+        const unsub = ref.onSnapshot(
+            snap => {
+                if (snap.exists()) {
+                    const data = snap.data() as ContactConfig;
+                    setContactCfg(data || {});
+                    setContactError(null);
+                } else {
+                    console.warn('[Help] contactInfo doc not found in nodes collection');
+                    setContactError('Contact details not configured yet.');
+                }
+                setContactLoading(false);
+            },
+            err => {
+                console.error('[Help] Failed to load contact info:', err);
+                setContactError('Failed to load contact details.');
+                setContactLoading(false);
+            },
+        );
+
+        return () => unsub();
+    }, []);
+
+    // 🔹 Derived values with safe fallbacks
+    const supportPhone =
+        contactCfg.supportPhone && contactCfg.supportPhone.trim().length > 0
+            ? contactCfg.supportPhone.trim()
+            : '+91XXXXXXXXXX';
+
+    const whatsappPhone =
+        contactCfg.whatsappPhone && contactCfg.whatsappPhone.trim().length > 0
+            ? contactCfg.whatsappPhone.trim()
+            : supportPhone;
+
+    const supportEmail =
+        contactCfg.supportEmail && contactCfg.supportEmail.trim().length > 0
+            ? contactCfg.supportEmail.trim()
+            : 'support@example.com';
+
+    const officeAddress =
+        contactCfg.officeAddress && contactCfg.officeAddress.trim().length > 0
+            ? contactCfg.officeAddress.trim()
+            : 'ABS Educational Solution, MINI MARKET \nBUILDING, 104-106, BP Rd, beside BASSEIN CATHOLIC BANK, Bhayandar, Venkateshwar Nagar, Bhayandar East, Mumbai, Mira Bhayandar, Maharashtra 401105';
+
+    const officeHours =
+        contactCfg.officeHours && contactCfg.officeHours.trim().length > 0
+            ? contactCfg.officeHours.trim()
+            : '10:00 AM – 7:00 PM (Mon–Sat)';
+
+    const mapQuery = encodeURIComponent(
+        (contactCfg.mapsQueryOverride && contactCfg.mapsQueryOverride.trim().length > 0
+            ? contactCfg.mapsQueryOverride.trim()
+            : officeAddress
+        ).replace(/\n/g, ' '),
+    );
 
     const validate = () => {
         const n = name.trim();
@@ -101,8 +169,20 @@ export default function HelpScreen({ }: Props) {
                 body: JSON.stringify(payload),
             });
 
-            const j = await res.json().catch(() => ({}));
-            if (!j.ok) throw new Error(j.error || 'Email relay failed');
+            const rawText = await res.text();
+            console.log('[Help] Apps Script status =', res.status);
+            console.log('[Help] Apps Script raw body =', rawText);
+
+            let j: any = {};
+            try {
+                j = JSON.parse(rawText);
+            } catch (e) {
+                console.log('[Help] JSON parse failed:', e);
+            }
+
+            if (!j.ok) {
+                throw new Error(j.error || 'Email relay failed');
+            }
 
             setName('');
             setEmail('');
@@ -119,21 +199,24 @@ export default function HelpScreen({ }: Props) {
         }
     };
 
-    const openDialer = () => Linking.openURL(`tel:${PHONE}`);
+    const openDialer = () => Linking.openURL(`tel:${supportPhone}`);
+
     const openWhatsApp = () =>
         Linking.openURL(
-            `https://wa.me/${PHONE.replace(
+            `https://wa.me/${whatsappPhone.replace(
                 '+',
                 '',
             )}?text=${encodeURIComponent('Hi ABS Team, I need help with...')}`,
         );
+
     const openEmail = () =>
         Linking.openURL(
-            `mailto:${EMAIL}?subject=${encodeURIComponent('Support Request')}`,
+            `mailto:${supportEmail}?subject=${encodeURIComponent('Support Request')}`,
         );
+
     const openMaps = () =>
         Linking.openURL(
-            `https://www.google.com/maps/search/?api=1&query=${MAP_Q}`,
+            `https://www.google.com/maps/search/?api=1&query=${mapQuery}`,
         );
 
     const bottomPad = Math.max(insets.bottom, 10);
@@ -141,7 +224,7 @@ export default function HelpScreen({ }: Props) {
     return (
         <SafeAreaView
             style={styles.safeArea}
-            edges={['top', 'left', 'right']} // ✅ top + sides handled here, bottom handled via bottomPad
+            edges={['top', 'left', 'right']}
         >
             <StatusBar
                 barStyle={isDark ? 'light-content' : 'dark-content'}
@@ -171,6 +254,36 @@ export default function HelpScreen({ }: Props) {
                         </Text>
                     </View>
 
+                    {/* Contact info loading/error */}
+                    {contactLoading && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                            <ActivityIndicator size="small" color={ACCENT} />
+                            <Text
+                                style={[
+                                    styles.screenSubtitle,
+                                    { marginLeft: 8, fontSize: 12 * scale },
+                                ]}
+                            >
+                                Loading contact details...
+                            </Text>
+                        </View>
+                    )}
+
+                    {contactError && !contactLoading && (
+                        <Text
+                            style={[
+                                styles.screenSubtitle,
+                                {
+                                    color: '#F97373',
+                                    marginBottom: 8,
+                                    fontSize: 12 * scale,
+                                },
+                            ]}
+                        >
+                            {contactError}
+                        </Text>
+                    )}
+
                     {/* Hero / Intro */}
                     <View style={styles.hero}>
                         <View style={styles.heroIconWrap}>
@@ -199,7 +312,7 @@ export default function HelpScreen({ }: Props) {
                                 Call
                             </Text>
                             <Text style={[styles.quickValue, { fontSize: 14 * scale }]}>
-                                {PHONE.replace('+91', '+91 ')}
+                                {supportPhone.replace('+91', '+91 ')}
                             </Text>
                         </TouchableOpacity>
 
@@ -230,7 +343,7 @@ export default function HelpScreen({ }: Props) {
                                 style={[styles.quickValue, { fontSize: 14 * scale }]}
                                 numberOfLines={1}
                             >
-                                {EMAIL}
+                                {supportEmail}
                             </Text>
                         </TouchableOpacity>
 
@@ -361,7 +474,7 @@ export default function HelpScreen({ }: Props) {
                                 color={isDark ? '#E5E7EB' : '#4B5563'}
                             />
                             <Text style={[styles.infoText, { fontSize: 14 * scale }]}>
-                                {ADDRESS_LINE}
+                                {officeAddress}
                             </Text>
                         </View>
                         <View style={styles.infoRow}>
@@ -371,7 +484,7 @@ export default function HelpScreen({ }: Props) {
                                 color={isDark ? '#E5E7EB' : '#4B5563'}
                             />
                             <Text style={[styles.infoText, { fontSize: 14 * scale }]}>
-                                Hours: 10:00 AM – 7:00 PM (Mon–Sat)
+                                Hours: {officeHours}
                             </Text>
                         </View>
                     </View>
@@ -380,7 +493,6 @@ export default function HelpScreen({ }: Props) {
         </SafeAreaView>
     );
 }
-
 /** Theme-aware + SafeArea-aware styles */
 const createStyles = (isDark: boolean) =>
     StyleSheet.create({

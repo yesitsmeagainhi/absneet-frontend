@@ -37,6 +37,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../navigation/rootnavigator';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 // ✅ Firebase Auth (React Native Firebase)
 import auth from '@react-native-firebase/auth';
@@ -54,6 +55,7 @@ export default function LoginScreen({ navigation }: Props) {
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<FormErrors>({});
     const [globalError, setGlobalError] = useState<string | null>(null);
+    const [showPass, setShowPass] = useState(false);
 
     const validate = (): boolean => {
         const trimmedNumber = number.trim();
@@ -94,7 +96,6 @@ export default function LoginScreen({ navigation }: Props) {
         setGlobalError(null);
         return true;
     };
-
     const handleLogin = async () => {
         if (!validate()) return;
 
@@ -111,13 +112,9 @@ export default function LoginScreen({ navigation }: Props) {
             // ✅ Sign in using Firebase Auth
             await auth().signInWithEmailAndPassword(email, password);
 
-            // 🔐 At this point Firebase will persist the session on device.
-            // With onAuthStateChanged in RootNavigator, user will stay logged in.
-
-            navigation.reset({
-                index: 0,
-                routes: [{ name: 'HomeTabs' }],
-            });
+            // ❌ NO navigation.reset / navigate here.
+            // RootNavigator's onAuthStateChanged will set `user`
+            // and automatically render the HomeTabs stack.
         } catch (err: any) {
             console.warn('Login FirebaseAuth error:', err);
 
@@ -199,24 +196,40 @@ export default function LoginScreen({ navigation }: Props) {
                         {/* Password */}
                         <View style={styles.fieldGroup}>
                             <Text style={styles.label}>Password</Text>
-                            <TextInput
-                                placeholder="Enter password"
-                                placeholderTextColor="#9CA3AF"
-                                style={[
-                                    styles.input,
-                                    errors.pass && styles.inputError,
-                                ]}
-                                secureTextEntry
-                                autoCapitalize="none"
-                                value={pass}
-                                onChangeText={txt => {
-                                    setPass(txt);
-                                    if (errors.pass) {
-                                        setErrors(prev => ({ ...prev, pass: undefined }));
-                                    }
-                                    if (globalError) setGlobalError(null);
-                                }}
-                            />
+
+                            <View style={styles.passwordRow}>
+                                <TextInput
+                                    placeholder="Create a password (min 6 characters)"
+                                    placeholderTextColor="#9CA3AF"
+                                    style={[
+                                        styles.input,
+                                        styles.passwordInput,
+                                        errors.pass && styles.inputError,
+                                    ]}
+                                    secureTextEntry={!showPass}   // 👈 toggle here
+                                    autoCapitalize="none"
+                                    value={pass}
+                                    onChangeText={txt => {
+                                        setPass(txt);
+                                        if (errors.pass) {
+                                            setErrors(prev => ({ ...prev, pass: undefined }));
+                                        }
+                                    }}
+                                />
+
+                                <Pressable
+                                    onPress={() => setShowPass(prev => !prev)}
+                                    style={styles.eyeButton}
+                                    hitSlop={10}
+                                >
+                                    <Icon
+                                        name={showPass ? 'eye-off-outline' : 'eye-outline'}
+                                        size={20}
+                                        color="#6B7280"
+                                    />
+                                </Pressable>
+                            </View>
+
                             {!!errors.pass && (
                                 <Text style={styles.errorText}>{errors.pass}</Text>
                             )}
@@ -387,5 +400,18 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
         color: GREEN,
+    },
+    passwordRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    passwordInput: {
+        flex: 1,
+        paddingRight: 40, // space so text doesn't go under the eye icon
+    },
+    eyeButton: {
+        position: 'absolute',
+        right: 10,
+        padding: 4,
     },
 });

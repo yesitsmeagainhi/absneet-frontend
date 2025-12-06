@@ -639,7 +639,7 @@ export default function RootNavigator() {
                 />
                 <ActivityIndicator color={isDark ? '#E5E7EB' : '#4B5563'} />
                 <Text style={[stylesInit.splashText, { color: headerText }]}>
-                    Preparing your NEET practice…
+                    Getting everything ready for your NEET prep…
                 </Text>
             </View>
         );

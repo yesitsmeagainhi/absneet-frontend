@@ -1937,6 +1937,8 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+// src/screens/Home/HomeScreen.tsx
+import auth from '@react-native-firebase/auth';
 
 // 🔹 Firestore (React Native Firebase)
 import { db } from '../../services/firebase.native';
@@ -1955,6 +1957,8 @@ const HOME_INTRO_KEY = 'absneet_home_intro_seen_v5';
 
 const TIP_CARD_HEIGHT = 150;      // approximate height of the tip card
 const WAVE_ARROW_HEIGHT = 80;     // approximate arrow image height
+// 👈 change this string to whatever you really use in RootNavigator
+const AUTH_ROOT_ROUTE = 'Auth'; // or 'Login', 'AuthStack', etc.
 
 // All tips in sequence
 const INTRO_STEPS = [
@@ -2033,6 +2037,7 @@ export default function HomeScreen() {
   const [banners, setBanners] = useState<BannerItem[]>([]);
   const [bannersError, setBannersError] = useState<string | null>(null);
   const [bannersLoading, setBannersLoading] = useState(true); // 👈 loading flag
+  const [brokenBannerIds, setBrokenBannerIds] = useState<string[]>([]);
 
   // 🔹 Logout overlay flag
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -2044,7 +2049,7 @@ export default function HomeScreen() {
 
   // 🔹 anchors for dynamic positioning (intro tips)
   const [anchors, setAnchors] = useState({
-    topAreaY: 0,      // bottom of top bar + banners
+    topAreaY: 0,      // bottom of top bar + hgs
     subjectsY: 0,     // bottom of subjects section
     practiceY: 0,     // bottom of practice section
     customMcqY: 0,    // center of Custom MCQ card
@@ -2204,6 +2209,8 @@ export default function HomeScreen() {
         // Only active banners with image
         const activeItems = items.filter(b => b.active && b.imageUrl);
         setBanners(activeItems);
+        setBrokenBannerIds([]);     // reset if we get fresh data
+
         setBannersLoading(false);
       },
       error => {
@@ -2229,16 +2236,16 @@ export default function HomeScreen() {
 
         console.log('[HOME_INTRO] flag =', flag);
         // For now: always show tips from step 0
-        setIntroStep(0);
-        setShowIntro(true);
+        // setIntroStep(0);
+        // setShowIntro(true);
 
         // If later you want "show only once", restore this:
-        // if (flag === '1') {
-        //   setShowIntro(false);
-        // } else {
-        //   setIntroStep(0);
-        //   setShowIntro(true);
-        // }
+        if (flag === '1') {
+          setShowIntro(false);
+        } else {
+          setIntroStep(0);
+          setShowIntro(true);
+        }
       } catch (e) {
         console.warn('Failed to read home intro flag:', e);
         setIntroStep(0);
@@ -2376,7 +2383,6 @@ export default function HomeScreen() {
         return undefined;
     }
   }, [currentStep, anchors]);
-
   // 🔹 Logout handlers (custom overlay)
   const handleLogout = useCallback(() => {
     setShowLogoutConfirm(true);
@@ -2384,21 +2390,26 @@ export default function HomeScreen() {
 
   const confirmLogout = useCallback(async () => {
     setShowLogoutConfirm(false);
-    try {
-      await AsyncStorage.clear();
-    } catch (e) {
-      console.warn('Failed to clear storage on logout:', e);
-    }
 
-    nav.reset({
-      index: 0,
-      routes: [{ name: 'Login' }],
-    });
-  }, [nav]);
+    try {
+      // ❗ Instead of AsyncStorage.clear(), remove only what you really need.
+      // For example: clear the login timestamp so TTL resets.
+      await AsyncStorage.removeItem('abs_neet_last_login_at');
+
+      // If you store user email / tokens elsewhere, remove those keys too:
+      // await AsyncStorage.multiRemove(['abs_neet_last_login_at', 'user_email', ...]);
+
+      // 🔐 Sign out from Firebase – this will flip `user` to null in RootNavigator
+      await auth().signOut();
+    } catch (e) {
+      console.warn('Failed to logout:', e);
+    }
+  }, []);
 
   const cancelLogout = useCallback(() => {
     setShowLogoutConfirm(false);
   }, []);
+
 
   // 🔹 Android back button → confirm exit
   useFocusEffect(
@@ -2430,6 +2441,19 @@ export default function HomeScreen() {
     }, []),
   );
 
+
+
+  const renderFallbackBanner = () => (
+    <View style={styles.bannerCard}>
+      <View style={styles.bannerFallback}>
+        <Text style={styles.bannerFallbackTitle}>NEET-Exam Practice</Text>
+        <Text style={styles.bannerFallbackSubtitle}>
+          Daily MCQs • PYQs • Mock Tests to help you crack NEET.
+        </Text>
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <View style={styles.root}>
@@ -2449,8 +2473,8 @@ export default function HomeScreen() {
             {/* Top app bar */}
             <View style={styles.topBar}>
               <View>
-                <Text style={styles.appTitle}>ABS NEET</Text>
-                <Text style={styles.appSubtitle}>NEET Practice App</Text>
+                <Text style={styles.appTitle}>NEET-EXAM</Text>
+                <Text style={styles.appSubtitle}>Practice for NEET</Text>
               </View>
 
               <View style={styles.topRightRow}>
@@ -2495,37 +2519,53 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               ) : banners.length === 0 ? (
-                <View style={styles.bannerEmpty}>
-                  <Text style={styles.bannerEmptyTitle}>No banners yet</Text>
-                  <Text style={styles.bannerEmptySubtitle}>
-                    Add “banner” nodes in Firestore to show them here.
-                  </Text>
-                </View>
+                // 🔁 No banners from Firestore → show fallback promo banner
+                renderFallbackBanner()
               ) : (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.bannerScroll}
                 >
-                  {banners.map(b => (
-                    <Pressable
-                      key={b.id}
-                      android_ripple={{ color: isDark ? '#E5E7EB' : '#1E293B' }}
-                      onPress={() => handleBannerPress(b)}
-                      style={({ pressed }) => [
-                        styles.bannerCard,
-                        pressed && styles.bannerCardPressed,
-                      ]}
-                    >
-                      <Image
-                        source={{ uri: b.imageUrl }}
-                        style={styles.bannerImage}
-                        resizeMode="cover"
-                      />
-                    </Pressable>
-                  ))}
+                  {banners.map(b => {
+                    const isBroken = brokenBannerIds.includes(b.id);
+
+                    return (
+                      <Pressable
+                        key={b.id}
+                        android_ripple={{ color: isDark ? '#E5E7EB' : '#1E293B' }}
+                        onPress={() => handleBannerPress(b)}
+                        style={({ pressed }) => [
+                          styles.bannerCard,
+                          pressed && styles.bannerCardPressed,
+                        ]}
+                      >
+                        {/* 🔁 If image failed or URL empty → show text fallback */}
+                        {!b.imageUrl || isBroken ? (
+                          <View style={styles.bannerFallback}>
+                            <Text style={styles.bannerFallbackTitle}>NEET-Exam Practice</Text>
+                            <Text style={styles.bannerFallbackSubtitle}>
+                              Practice MCQs, PYQs & Mock Tests every day.
+                            </Text>
+                          </View>
+                        ) : (
+                          <Image
+                            source={{ uri: b.imageUrl }}
+                            style={styles.bannerImage}
+                            resizeMode="cover"
+                            onError={() =>
+                              setBrokenBannerIds(prev =>
+                                prev.includes(b.id) ? prev : [...prev, b.id],
+                              )
+                            }
+                          />
+                        )}
+                      </Pressable>
+                    );
+                  })}
                 </ScrollView>
               )}
+
             </View>
           </View>
 
@@ -2941,6 +2981,23 @@ const createStyles = (isDark: boolean) =>
       color: isDark ? '#9CA3AF' : '#6B7280',
       marginTop: 2,
       textAlign: 'center',
+    },
+    bannerFallback: {
+      flex: 1,
+      paddingHorizontal: 14,
+      paddingVertical: 16,
+      justifyContent: 'center',
+      backgroundColor: isDark ? '#0F172A' : '#DBEAFE',
+    },
+    bannerFallbackTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: isDark ? '#F9FAFB' : '#111827',
+      marginBottom: 4,
+    },
+    bannerFallbackSubtitle: {
+      fontSize: 12,
+      color: isDark ? '#E5E7EB' : '#1F2937',
     },
 
     // Sections
