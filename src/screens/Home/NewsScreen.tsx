@@ -15,9 +15,14 @@ import {
     TouchableOpacity,
     View,
     StyleSheet,
+    StatusBar,
+    Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context'; // ✅ NEW
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import { RootStackParamList } from '../../navigation/rootnavigator';
 import { db } from '../../services/firebase.native';
 import { useTheme } from '../../theme/ThemeContext';
 
@@ -36,7 +41,7 @@ type NewsItem = {
 };
 
 const PAGE = 10;
-const ACCENT = '#6D28D9';
+const ACCENT = '#074e87'; // Primary Blue
 
 function isIndexMissing(err: any) {
     const msg = String(err?.message || '').toLowerCase();
@@ -44,7 +49,11 @@ function isIndexMissing(err: any) {
     return code.includes('failed-precondition') || msg.includes('index');
 }
 
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
 export default function NewsScreen() {
+    const navigation = useNavigation<Nav>();
+
     // 🔹 state hooks
     const [items, setItems] = useState<NewsItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -53,7 +62,6 @@ export default function NewsScreen() {
     const [endReached, setEndReached] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [usingFallback, setUsingFallback] = useState(false);
-    const [expandedId, setExpandedId] = useState<string | null>(null);
 
     const lastDocRef = useRef<FirebaseFirestoreTypes.DocumentSnapshot | null>(
         null,
@@ -157,7 +165,6 @@ export default function NewsScreen() {
         setEndReached(false);
         setUsingFallback(false);
         lastDocRef.current = null;
-        setExpandedId(null);
 
         try {
             await fetchFirstPageIndexed();
@@ -222,8 +229,23 @@ export default function NewsScreen() {
     }, [loadFirstPage]);
 
     // --- UI helpers ---
-    const toggleExpand = (id: string) => {
-        setExpandedId(prev => (prev === id ? null : id));
+    const navigateToDetail = (item: NewsItem) => {
+        navigation.navigate('NewsDetail', {
+            news: {
+                id: item.id,
+                title: item.title,
+                subtitle: item.subtitle,
+                excerpt: item.excerpt,
+                summary: item.summary,
+                content: item.content,
+                coverUrl: item.coverUrl,
+                bannerUrl: item.bannerUrl,
+                author: item.author,
+                createdAt: item.createdAt && 'toDate' in item.createdAt
+                    ? item.createdAt.toDate().getTime()
+                    : undefined,
+            },
+        });
     };
 
     const renderItem: ListRenderItem<NewsItem> = ({ item }) => {
@@ -242,9 +264,6 @@ export default function NewsScreen() {
             Date.now() - item.createdAt.toDate().getTime() <
             3 * 24 * 60 * 60 * 1000;
 
-        const isExpanded = expandedId === item.id;
-        const fullText = item.content || item.summary || item.excerpt || '';
-
         const authorName = item.author || 'ABS Team';
         const authorInitial =
             authorName.trim().length > 0
@@ -254,16 +273,16 @@ export default function NewsScreen() {
         return (
             <TouchableOpacity
                 activeOpacity={0.9}
-                onPress={() => toggleExpand(item.id)}
+                onPress={() => navigateToDetail(item)}
             >
-                <View style={[styles.card, isExpanded && styles.cardExpanded]}>
+                <View style={styles.card}>
                     {/* Cover image with overlay */}
                     <View style={styles.coverWrapper}>
                         {img ? (
                             <Image source={{ uri: img }} style={styles.cover} />
                         ) : (
                             <View style={styles.coverPlaceholder}>
-                                <Text style={styles.coverPlaceholderText}>ABS NEWS</Text>
+                                <Text style={styles.coverPlaceholderText}>NEWS</Text>
                             </View>
                         )}
 
@@ -302,26 +321,16 @@ export default function NewsScreen() {
                         )}
 
                         {/* Short preview */}
-                        {!!(item.excerpt ?? item.summary) && !isExpanded && (
+                        {!!(item.excerpt ?? item.summary) && (
                             <Text style={styles.excerpt} numberOfLines={3}>
                                 {item.excerpt ?? item.summary}
                             </Text>
                         )}
 
-                        {/* Expanded content */}
-                        {isExpanded && !!fullText && (
-                            <View style={styles.expandedBlock}>
-                                <Text style={styles.expandedLabel}>Full update</Text>
-                                <Text style={styles.expandedText}>{fullText}</Text>
-                            </View>
-                        )}
-
                         {/* Bottom row */}
                         <View style={styles.bottomRow}>
-                            <Text style={styles.metaBottom}>ABS Newsroom</Text>
-                            <Text style={styles.readMore}>
-                                {isExpanded ? 'Tap to hide ▲' : 'Tap to read more ▼'}
-                            </Text>
+                            <Text style={styles.metaBottom}>News</Text>
+                            <Text style={styles.readMore}>Tap to read more →</Text>
                         </View>
                     </View>
                 </View>
@@ -332,10 +341,10 @@ export default function NewsScreen() {
     const ListHeader = () => (
         <View style={styles.headerContainer}>
             <View style={styles.headerBadgeRow}>
-                <Text style={styles.headerBadge}>ABS Newsroom</Text>
-                {items.length > 0 && (
+                {/* <Text style={styles.headerBadge}>ABS Newsroom</Text> */}
+                {/* {items.length > 0 && (
                     <Text style={styles.headerCount}>{items.length} posts</Text>
-                )}
+                )} */}
             </View>
 
             <Text style={styles.heading}>News & Updates</Text>
@@ -344,21 +353,6 @@ export default function NewsScreen() {
                 Stay updated with important announcements, mock tests and exam tips from
                 ABS.
             </Text>
-
-            {(error || usingFallback) && (
-                <View
-                    style={[
-                        styles.banner,
-                        error ? styles.bannerError : styles.bannerWarn,
-                    ]}
-                >
-                    <Text style={styles.bannerText}>
-                        {error
-                            ? error
-                            : 'Using fallback (no index). Create composite index on published ASC, createdAt DESC in Firestore.'}
-                    </Text>
-                </View>
-            )}
         </View>
     );
 
@@ -388,6 +382,26 @@ export default function NewsScreen() {
             </View>
         );
     };
+
+    // 🔹 Set white StatusBar immediately on mount
+    useEffect(() => {
+        StatusBar.setBarStyle(isDark ? 'light-content' : 'dark-content');
+        if (Platform.OS === 'android') {
+            StatusBar.setBackgroundColor(isDark ? '#0F172A' : '#FFFFFF');
+            StatusBar.setTranslucent(false);
+        }
+    }, [isDark]);
+
+    // 🔹 Also set white StatusBar when this screen is focused (for tab switches)
+    useFocusEffect(
+        React.useCallback(() => {
+            StatusBar.setBarStyle(isDark ? 'light-content' : 'dark-content');
+            if (Platform.OS === 'android') {
+                StatusBar.setBackgroundColor(isDark ? '#0F172A' : '#FFFFFF');
+                StatusBar.setTranslucent(false);
+            }
+        }, [isDark])
+    );
 
     // ✅ Root now uses SafeAreaView so content plays nicely with notches
     return (
@@ -435,7 +449,7 @@ const createStyles = (isDark: boolean) =>
     StyleSheet.create({
         safeArea: {
             flex: 1,
-            backgroundColor: isDark ? '#020617' : '#F3F4F6',
+            backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
         },
         screen: {
             flex: 1,
@@ -561,7 +575,7 @@ const createStyles = (isDark: boolean) =>
             paddingHorizontal: 10,
             paddingVertical: 4,
             borderRadius: 999,
-            backgroundColor: '#22C55E',
+            backgroundColor: '#fc720a',
             color: '#022C22',
             fontSize: 11,
             fontWeight: '700',

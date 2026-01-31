@@ -1,5 +1,5 @@
 // src/screens/Papers/MockTestPapersScreen.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,14 @@ import {
   ScrollView,
   FlatList,
   ActivityIndicator,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 
-import { useTheme } from '../../theme/ThemeContext';
+import { useTheme, Colors } from '../../theme/ThemeContext';
 import { db } from '../../firebase';
 import {
   collection,
@@ -53,6 +56,17 @@ const subjectMocksCol = collection(db, 'mock_subject_mock_papers'); // 👈 adju
 export default function MockTestPapersScreen({ navigation }: Props) {
   const { isDark } = useTheme();
   const styles = useMemo(() => createStyles(isDark), [isDark]);
+
+  // Set blue StatusBar for this screen
+  useFocusEffect(
+    useCallback(() => {
+      StatusBar.setBarStyle('light-content');
+      if (Platform.OS === 'android') {
+        StatusBar.setBackgroundColor(isDark ? '#0F172A' : Colors.primary);
+        StatusBar.setTranslucent(false);
+      }
+    }, [isDark])
+  );
 
   const [fullExamPapers, setFullExamPapers] = useState<FullExamPdfDoc[]>([]);
   const [groupedSubjectMocks, setGroupedSubjectMocks] = useState<SubjectWithMockPapers[]>([]);

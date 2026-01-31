@@ -1,0 +1,8 @@
+chapterId,chapterName,subjectId,unitId,order,active
+ch_phy_01,Laws of Motion,physics,unit_phy_01,1,TRUE
+ch_phy_02,Work Energy and Power,physics,unit_phy_01,2,TRUE
+ch_phy_03,Gravitation,physics,unit_phy_02,1,TRUE
+ch_chem_01,Atomic Structure,chemistry,unit_chem_01,1,TRUE
+ch_chem_02,Chemical Bonding,chemistry,unit_chem_01,2,TRUE
+ch_bio_01,Cell Structure,biology,unit_bio_01,1,TRUE
+ch_bio_02,Cell Division,biology,unit_bio_01,2,TRUE

@@ -29,7 +29,7 @@ import { createMaterialTopTabNavigator } from '@react-navigation/material-top-ta
 import VideosScreen from '../screens/Content/VideosScreen';
 import PdfsScreen from '../screens/Content/PdfsScreen';
 import McqIntroScreen from '../screens/Content/McqIntroScreen';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, Colors } from '../theme/ThemeContext';
 
 const Tab = createMaterialTopTabNavigator();
 
@@ -65,7 +65,7 @@ export default function ContentTabs({ route }: any) {
                 textTransform: 'none',
             },
             tabBarIndicatorStyle: {
-                backgroundColor: '#22C55E',
+                backgroundColor: Colors.accent,
             },
             sceneBg: isDark ? '#0F172A' : '#F9FAFB',
             inactiveColor: isDark ? '#9CA3AF' : '#6B7280',
@@ -80,7 +80,7 @@ export default function ContentTabs({ route }: any) {
                     tabBarStyle,
                     tabBarIndicatorStyle,
                     tabBarLabelStyle,
-                    tabBarActiveTintColor: '#22C55E',
+                    tabBarActiveTintColor: Colors.accent,
                     tabBarInactiveTintColor: inactiveColor,
                 }}
             >

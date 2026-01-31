@@ -3,13 +3,16 @@
 export type Video = { id: string; title: string; url: string };
 export type Pdf = { id: string; title: string; url: string };
 
-// 🔹 Question with explanation
+// 🔹 Question with explanation and image support
 export type Question = {
   id: string;
   q: string;
+  qImage?: string;           // Optional question image URL (diagrams, figures, graphs)
   options: string[];
+  optionImages?: string[];   // Optional image URLs for options (for image-based answers)
   correctIndex: number;
   explanation?: string;
+  explanationImage?: string; // Optional explanation diagram
 };
 
 export type PYQPdfPaper = {

@@ -1,16 +1,22 @@
 // src/screens/MCQ/MCQQuizScreen.tsx
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Image,
+  ScrollView,
+  StatusBar,
+  Platform,
+  Alert,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 
-import { useTheme } from '../../theme/ThemeContext';
+import { useTheme, Colors } from '../../theme/ThemeContext';
 
 // 🔹 Firestore (same style as McqIntroScreen)
 import { db } from '../../firebase';
@@ -26,12 +32,16 @@ import {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MCQQuiz'>;
 
-// 🔹 Same Question shape as admin ChaptersPage
+// 🔹 Question shape with image support
 type Question = {
   id: string;
   q: string;
+  qImage?: string;           // Optional question image URL
   options: string[];
+  optionImages?: string[];   // Optional image URLs for options
   correctIndex: number;
+  explanation?: string;
+  explanationImage?: string;
 };
 
 type ChapterDoc = {
@@ -56,6 +66,46 @@ export default function MCQQuizScreen({ route, navigation }: Props) {
 
   const { isDark } = useTheme();
   const styles = useMemo(() => createStyles(isDark), [isDark]);
+
+  // Set blue StatusBar when this screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      StatusBar.setBarStyle('light-content');
+      if (Platform.OS === 'android') {
+        StatusBar.setBackgroundColor(isDark ? '#0F172A' : Colors.primary);
+        StatusBar.setTranslucent(false);
+      }
+    }, [isDark])
+  );
+
+  // 🚫 Prevent back navigation until quiz is submitted (handles hardware back, swipe, header back)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      // Allow navigation if it's a replace (submit) action
+      if (e.data.action.type === 'REPLACE') {
+        return;
+      }
+
+      // Prevent default behavior of leaving the screen
+      e.preventDefault();
+
+      Alert.alert(
+        'Exit Quiz?',
+        'You must submit your answers before leaving. Are you sure you want to exit without submitting?',
+        [
+          { text: 'Continue Quiz', style: 'cancel', onPress: () => {} },
+          {
+            text: 'Exit Anyway',
+            style: 'destructive',
+            onPress: () => navigation.dispatch(e.data.action),
+          },
+        ],
+        { cancelable: true }
+      );
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   const [chapter, setChapter] = useState<ChapterDoc | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -239,6 +289,9 @@ export default function MCQQuizScreen({ route, navigation }: Props) {
   const nextLabel = isLast ? 'Submit Quiz' : 'Next';
 
   // ---------- UI ----------
+  // Check if question image exists and is non-empty
+  const hasQuestionImage = q.qImage && q.qImage.trim() !== '';
+
   return (
     <View style={styles.c}>
       <Text style={styles.h}>
@@ -251,27 +304,52 @@ export default function MCQQuizScreen({ route, navigation }: Props) {
         <Text style={styles.chapterName}>{chapter.name}</Text>
       ) : null}
 
-      <Text style={styles.q}>{q.q}</Text>
+      <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <Text style={styles.q}>{q.q}</Text>
 
-      {q.options.map((opt, i) => {
-        const selected = answers[idx] === i;
-        return (
-          <TouchableOpacity
-            key={i}
-            style={[styles.opt, selected && styles.optSelected]}
-            onPress={() => handleSelect(i)}
-          >
-            <Text
-              style={[
-                styles.optText,
-                selected && styles.optTextSelected,
-              ]}
+        {/* Question Image (if available and non-empty) */}
+        {hasQuestionImage && (
+          <Image
+            source={{ uri: q.qImage }}
+            style={styles.questionImage}
+            resizeMode="contain"
+          />
+        )}
+
+        {/* Options - show image if available, otherwise show text */}
+        {q.options.map((opt, i) => {
+          const selected = answers[idx] === i;
+          // Get option image only if it exists and is non-empty
+          const optionImage = q.optionImages?.[i] && q.optionImages[i].trim() !== ''
+            ? q.optionImages[i]
+            : null;
+
+          return (
+            <TouchableOpacity
+              key={i}
+              style={[styles.opt, selected && styles.optSelected]}
+              onPress={() => handleSelect(i)}
             >
-              {opt}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+              {optionImage ? (
+                <Image
+                  source={{ uri: optionImage }}
+                  style={styles.optionImage}
+                  resizeMode="contain"
+                />
+              ) : (
+                <Text
+                  style={[
+                    styles.optText,
+                    selected && styles.optTextSelected,
+                  ]}
+                >
+                  {opt}
+                </Text>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
       {/* Bottom navigation bar */}
       <View style={styles.bottomBar}>
@@ -355,6 +433,22 @@ const createStyles = (isDark: boolean) =>
       marginVertical: 12,
       color: isDark ? '#F9FAFB' : '#111827',
     },
+    scrollContent: {
+      flex: 1,
+      marginBottom: 8,
+    },
+    questionImage: {
+      width: '100%',
+      height: 200,
+      marginBottom: 12,
+      borderRadius: 8,
+      backgroundColor: isDark ? '#1F2937' : '#F3F4F6',
+    },
+    optionImage: {
+      width: '100%',
+      height: 100,
+      borderRadius: 6,
+    },
     opt: {
       borderWidth: 1,
       borderColor: isDark ? '#1F2937' : '#DDDDDD',
@@ -364,8 +458,8 @@ const createStyles = (isDark: boolean) =>
       backgroundColor: isDark ? '#020617' : '#FFFFFF',
     },
     optSelected: {
-      borderColor: '#6D28D9',
-      backgroundColor: isDark ? '#312E81' : '#EDE9FE',
+      borderColor: Colors.primary,
+      backgroundColor: isDark ? '#1E3A5F' : '#E0F2FE',
     },
     optText: {
       fontSize: 14,
@@ -408,7 +502,7 @@ const createStyles = (isDark: boolean) =>
       paddingVertical: 10,
       paddingHorizontal: 18,
       borderRadius: 999,
-      backgroundColor: '#6D28D9',
+      backgroundColor: Colors.primary,
     },
     navBtnPrimaryText: {
       color: '#FFFFFF',

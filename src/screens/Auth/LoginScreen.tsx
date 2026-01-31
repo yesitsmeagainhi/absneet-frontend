@@ -38,6 +38,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../navigation/rootnavigator';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { Colors } from '../../theme/ThemeContext';
 
 // ✅ Firebase Auth (React Native Firebase)
 import auth from '@react-native-firebase/auth';
@@ -103,7 +104,7 @@ export default function LoginScreen({ navigation }: Props) {
         const password = pass.trim();
 
         // ✅ Create a synthetic email from mobile for email/password auth
-        const email = `${mobile}@absneet.app`;
+        const email = `${mobile}@topinexam.app`;
 
         try {
             setLoading(true);
@@ -141,8 +142,8 @@ export default function LoginScreen({ navigation }: Props) {
         <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
             {/* Top colored header strip */}
             <View style={styles.headerStrip}>
-                <Text style={styles.appTitle}>ABS NEET</Text>
-                <Text style={styles.appSubtitle}>Focused NEET Practice App</Text>
+                <Text style={styles.appTitle}>Top in Exam</Text>
+                <Text style={styles.appSubtitle}>Focused Exam Practice App</Text>
             </View>
 
             <KeyboardAvoidingView
@@ -156,7 +157,7 @@ export default function LoginScreen({ navigation }: Props) {
                     <View style={styles.card}>
                         <Text style={styles.heading}>Welcome back 👋</Text>
                         <Text style={styles.subheading}>
-                            Login to continue your NEET preparation journey.
+                            Login to continue your exam preparation journey.
                         </Text>
 
                         {/* Global error banner */}
@@ -254,7 +255,7 @@ export default function LoginScreen({ navigation }: Props) {
 
                         {/* Bottom link */}
                         <View style={styles.bottomRow}>
-                            <Text style={styles.bottomText}>New to ABS NEET?</Text>
+                            <Text style={styles.bottomText}>New to Top in Exam?</Text>
                             <Pressable onPress={() => navigation.navigate('SignUp')}>
                                 <Text style={styles.linkText}>Create account</Text>
                             </Pressable>
@@ -266,8 +267,8 @@ export default function LoginScreen({ navigation }: Props) {
     );
 }
 
-const GREEN = '#22C55E';
-const PURPLE = '#4F46E5';
+const PRIMARY = Colors.primary;    // Deep Blue
+const ACCENT = Colors.accent;      // Vibrant Orange
 
 const styles = StyleSheet.create({
     flex: { flex: 1 },
@@ -278,7 +279,7 @@ const styles = StyleSheet.create({
     headerStrip: {
         paddingHorizontal: 20,
         paddingVertical: 18,
-        backgroundColor: PURPLE,
+        backgroundColor: PRIMARY,
         borderBottomLeftRadius: 24,
         borderBottomRightRadius: 24,
     },
@@ -372,10 +373,10 @@ const styles = StyleSheet.create({
         borderRadius: 999,
         paddingVertical: 12,
         alignItems: 'center',
-        backgroundColor: PURPLE,
+        backgroundColor: PRIMARY,
     },
     primaryBtnPressed: {
-        backgroundColor: '#4338CA',
+        backgroundColor: Colors.primaryDark,
     },
     primaryBtnDisabled: {
         opacity: 0.6,
@@ -399,7 +400,7 @@ const styles = StyleSheet.create({
     linkText: {
         fontSize: 12,
         fontWeight: '600',
-        color: GREEN,
+        color: ACCENT,
     },
     passwordRow: {
         flexDirection: 'row',

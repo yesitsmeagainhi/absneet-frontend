@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -17,6 +17,7 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/rootnavigator';
 import { useTheme } from '../../theme/ThemeContext';
@@ -28,7 +29,7 @@ const APPS_SCRIPT_TOKEN = 'secure@009';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Help'>;
 
-const ACCENT = '#6D28D9';
+const ACCENT = '#074e87'; // Primary Blue
 
 type ContactConfig = {
     type?: string;
@@ -221,16 +222,31 @@ export default function HelpScreen({}: Props) {
 
     const bottomPad = Math.max(insets.bottom, 10);
 
+    // 🔹 Set white StatusBar immediately on mount
+    useEffect(() => {
+        StatusBar.setBarStyle(isDark ? 'light-content' : 'dark-content');
+        if (Platform.OS === 'android') {
+            StatusBar.setBackgroundColor(isDark ? '#0F172A' : '#FFFFFF');
+            StatusBar.setTranslucent(false);
+        }
+    }, [isDark]);
+
+    // 🔹 Also set white StatusBar when this screen is focused (for tab switches)
+    useFocusEffect(
+        useCallback(() => {
+            StatusBar.setBarStyle(isDark ? 'light-content' : 'dark-content');
+            if (Platform.OS === 'android') {
+                StatusBar.setBackgroundColor(isDark ? '#0F172A' : '#FFFFFF');
+                StatusBar.setTranslucent(false);
+            }
+        }, [isDark])
+    );
+
     return (
         <SafeAreaView
             style={styles.safeArea}
             edges={['top', 'left', 'right']}
         >
-            <StatusBar
-                barStyle={isDark ? 'light-content' : 'dark-content'}
-                backgroundColor={isDark ? '#020617' : '#F9FAFB'}
-            />
-
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 style={styles.wrap}
@@ -307,7 +323,7 @@ export default function HelpScreen({}: Props) {
                             onPress={openDialer}
                             activeOpacity={0.8}
                         >
-                            <Icon name="phone" size={22 * scale} color="#22C55E" />
+                            <Icon name="phone" size={22 * scale} color="#fc720a" />
                             <Text style={[styles.quickLabel, { fontSize: 12 * scale }]}>
                                 Call
                             </Text>
@@ -321,7 +337,7 @@ export default function HelpScreen({}: Props) {
                             onPress={openWhatsApp}
                             activeOpacity={0.8}
                         >
-                            <Icon name="whatsapp" size={22 * scale} color="#22C55E" />
+                            <Icon name="whatsapp" size={22 * scale} color="#fc720a" />
                             <Text style={[styles.quickLabel, { fontSize: 12 * scale }]}>
                                 WhatsApp
                             </Text>
@@ -498,7 +514,7 @@ const createStyles = (isDark: boolean) =>
     StyleSheet.create({
         safeArea: {
             flex: 1,
-            backgroundColor: isDark ? '#020617' : '#F9FAFB', // matches screen background
+            backgroundColor: isDark ? '#0F172A' : '#FFFFFF', // white header for light mode
         },
         wrap: {
             flex: 1,

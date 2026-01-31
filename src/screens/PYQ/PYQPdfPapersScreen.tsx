@@ -154,7 +154,7 @@
 //     },
 //   });
 // src/screens/PYQ/PYQPdfPapersScreen.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -162,11 +162,14 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 
-import { useTheme } from '../../theme/ThemeContext'; // ✅ theme hook
+import { useTheme, Colors } from '../../theme/ThemeContext'; // ✅ theme hook
 import { db } from '../../firebase';                 // ✅ Firestore instance
 import {
   collection,
@@ -190,6 +193,17 @@ const col = collection(db, 'nodes');
 export default function PYQPdfPapersScreen({ navigation }: Props) {
   const { isDark } = useTheme();
   const styles = useMemo(() => createStyles(isDark), [isDark]);
+
+  // Set blue StatusBar for this screen
+  useFocusEffect(
+    useCallback(() => {
+      StatusBar.setBarStyle('light-content');
+      if (Platform.OS === 'android') {
+        StatusBar.setBackgroundColor(isDark ? '#0F172A' : Colors.primary);
+        StatusBar.setTranslucent(false);
+      }
+    }, [isDark])
+  );
 
   const [papers, setPapers] = useState<FullExamPdfDoc[]>([]);
   const [loading, setLoading] = useState(true);

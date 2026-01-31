@@ -2009,7 +2009,7 @@
 
 
 // src/screens/MCQ/CustomMCQselectScreen.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -2018,10 +2018,13 @@ import {
     ActivityIndicator,
     ScrollView,
     Alert,
+    StatusBar,
+    Platform,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/RootNavigator';
-import { useTheme } from '../../theme/ThemeContext';
+import { useTheme, Colors } from '../../theme/ThemeContext';
 
 // 🔹 React Native Firebase Firestore
 import firestore from '@react-native-firebase/firestore';
@@ -2037,13 +2040,16 @@ import {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CustomMCQQuiz'>;
 
-/** Same shape as chapter.questions in Firestore */
+/** Same shape as chapter.questions in Firestore (with image support) */
 type Question = {
     id: string;
     q: string;
+    qImage?: string;           // Optional question image URL
     options: string[];
+    optionImages?: string[];   // Optional image URLs for options
     correctIndex: number;
     explanation?: string;
+    explanationImage?: string; // Optional explanation image
 };
 
 type SubjectNode = {
@@ -2077,6 +2083,17 @@ type Option = { id: string; label: string };
 export default function CustomMCQQuizScreen({ navigation }: Props) {
     const { isDark } = useTheme();
     const styles = useMemo(() => createStyles(isDark), [isDark]);
+
+    // Set blue StatusBar when this screen is focused
+    useFocusEffect(
+        useCallback(() => {
+            StatusBar.setBarStyle('light-content');
+            if (Platform.OS === 'android') {
+                StatusBar.setBackgroundColor(isDark ? '#0F172A' : Colors.primary);
+                StatusBar.setTranslucent(false);
+            }
+        }, [isDark])
+    );
 
     const [loadingMeta, setLoadingMeta] = useState(true);
     const [subjects, setSubjects] = useState<SubjectNode[]>([]);
@@ -2161,10 +2178,13 @@ export default function CustomMCQQuizScreen({ navigation }: Props) {
                     const questions: Question[] = rawQs.map((q, idx) => ({
                         id: q.id || `${d.id}_${idx}`,
                         q: q.q ?? '',
+                        qImage: q.qImage,                    // Question image
                         options: Array.isArray(q.options) ? q.options : [],
+                        optionImages: Array.isArray(q.optionImages) ? q.optionImages : undefined,  // Option images
                         correctIndex:
                             typeof q.correctIndex === 'number' ? q.correctIndex : 0,
                         explanation: q.explanation,
+                        explanationImage: q.explanationImage, // Explanation image
                     }));
 
                     return {
@@ -2648,8 +2668,8 @@ const createStyles = (isDark: boolean) =>
             backgroundColor: isDark ? '#020617' : '#F9FAFB',
         },
         stepCircleActive: {
-            backgroundColor: '#6D28D9',
-            borderColor: '#6D28D9',
+            backgroundColor: '#074e87',
+            borderColor: '#074e87',
         },
         stepCircleText: {
             fontSize: 12,
@@ -2699,8 +2719,8 @@ const createStyles = (isDark: boolean) =>
             marginBottom: 6,
         },
         chipSelected: {
-            backgroundColor: '#6D28D9',
-            borderColor: '#6D28D9',
+            backgroundColor: '#074e87',
+            borderColor: '#074e87',
         },
         chipDisabled: {
             backgroundColor: isDark ? '#111827' : '#F3F4F6',
@@ -2727,7 +2747,7 @@ const createStyles = (isDark: boolean) =>
             backgroundColor: isDark ? '#020617' : '#F9FAFB',
         },
         loadBtn: {
-            backgroundColor: '#6D28D9',
+            backgroundColor: '#074e87',
             paddingVertical: 14,
             borderRadius: 12,
             alignItems: 'center',

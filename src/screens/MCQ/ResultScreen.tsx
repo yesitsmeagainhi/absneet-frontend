@@ -52,20 +52,24 @@
 //   },
 // });
 // src/screens/MCQ/ResultScreen.tsx
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Image,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 
 // 🔹 Use the Question type from your static demo data
 import { Question } from '../../data/demo';
-import { useTheme } from '../../theme/ThemeContext'; // ✅ theme
+import { useTheme, Colors } from '../../theme/ThemeContext'; // ✅ theme
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Result'>;
 
@@ -83,6 +87,17 @@ export default function ResultScreen({ route, navigation }: Props) {
 
   const { isDark } = useTheme();                          // ✅ read global theme
   const styles = useMemo(() => createStyles(isDark), [isDark]); // ✅ recompute on toggle
+
+  // Set blue StatusBar when this screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      StatusBar.setBarStyle('light-content');
+      if (Platform.OS === 'android') {
+        StatusBar.setBackgroundColor(isDark ? '#0F172A' : Colors.primary);
+        StatusBar.setTranslucent(false);
+      }
+    }, [isDark])
+  );
 
   // 🔹 Derived stats
   const attempted = answers.filter((a) => a >= 0).length;
@@ -190,10 +205,17 @@ export default function ResultScreen({ route, navigation }: Props) {
               </Text>
 
               {/* Explanation ONLY if user was wrong and explanation exists */}
-              {!gotRight && q.explanation && (
+              {!gotRight && (q.explanation || (q.explanationImage && q.explanationImage.trim() !== '')) && (
                 <View style={{ marginTop: 6 }}>
                   <Text style={styles.explLabel}>Explanation:</Text>
-                  <Text style={styles.explText}>{q.explanation}</Text>
+                  {q.explanation && <Text style={styles.explText}>{q.explanation}</Text>}
+                  {q.explanationImage && q.explanationImage.trim() !== '' && (
+                    <Image
+                      source={{ uri: q.explanationImage }}
+                      style={styles.explImage}
+                      resizeMode="contain"
+                    />
+                  )}
                 </View>
               )}
             </View>
@@ -224,17 +246,17 @@ const createStyles = (isDark: boolean) =>
     },
 
     summaryCard: {
-      backgroundColor: isDark ? '#111827' : '#EEF2FF',
+      backgroundColor: isDark ? '#111827' : '#E0F2FE',
       borderRadius: 12,
       padding: 12,
       borderWidth: 1,
-      borderColor: isDark ? '#1D4ED8' : '#C7D2FE',
+      borderColor: isDark ? Colors.primary : '#BAE6FD',
       marginBottom: 12,
     },
     summaryTitle: {
       fontSize: 16,
       fontWeight: '700',
-      color: isDark ? '#BFDBFE' : '#1D4ED8',
+      color: isDark ? '#93C5FD' : Colors.primary,
       marginBottom: 4,
     },
     summaryScore: {
@@ -258,7 +280,7 @@ const createStyles = (isDark: boolean) =>
       paddingVertical: 6,
       paddingHorizontal: 8,
       borderRadius: 10,
-      backgroundColor: isDark ? '#1F2937' : '#E0E7FF',
+      backgroundColor: isDark ? '#1F2937' : '#F0F9FF',
     },
     statLabel: {
       fontSize: 11,
@@ -312,12 +334,19 @@ const createStyles = (isDark: boolean) =>
       color: isDark ? '#E5E7EB' : '#4B5563',
       marginTop: 2,
     },
+    explImage: {
+      width: '100%',
+      height: 150,
+      marginTop: 8,
+      borderRadius: 8,
+      backgroundColor: isDark ? '#1F2937' : '#F3F4F6',
+    },
 
     bottomBar: {
       marginTop: 4,
     },
     primaryBtn: {
-      backgroundColor: '#6D28D9',
+      backgroundColor: Colors.primary,
       paddingVertical: 12,
       borderRadius: 12,
       alignItems: 'center',

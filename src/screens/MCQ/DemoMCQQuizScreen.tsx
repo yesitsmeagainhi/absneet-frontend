@@ -194,8 +194,8 @@ export default function DemoMCQQuizScreen({ route, navigation }: Props) {
                                 let txt = '#111';
 
                                 if (!submitted && isSelected) {
-                                    bg = '#EDE9FE';
-                                    border = '#6D28D9';
+                                    bg = '#E0F2FE';
+                                    border = '#074e87';
                                 }
 
                                 if (submitted) {
@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
         marginTop: 6,
     },
     primaryBtn: {
-        backgroundColor: '#6D28D9',
+        backgroundColor: '#074e87',
         paddingVertical: 10,
         borderRadius: 12,
         alignItems: 'center',

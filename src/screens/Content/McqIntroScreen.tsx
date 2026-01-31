@@ -130,29 +130,35 @@
 
 
 // src/screens/Content/McqIntroScreen.tsx
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
   ActivityIndicator,
   StyleSheet,
   TouchableOpacity,
+  StatusBar,
+  Platform,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 
 import { db } from '../../firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 
-import { useTheme } from '../../theme/ThemeContext';
+import { useTheme, Colors } from '../../theme/ThemeContext';
 
-// ---------- Types ----------
+// ---------- Types (with image support) ----------
 type Question = {
   id: string;
   q: string;
+  qImage?: string;           // Optional question image URL
   options: string[];
+  optionImages?: string[];   // Optional image URLs for options
   correctIndex: number;
+  explanation?: string;
+  explanationImage?: string; // Optional explanation image
 };
 
 type ChapterDoc = {
@@ -168,6 +174,17 @@ export default function McqIntroScreen() {
 
   const { isDark } = useTheme();
   const styles = useMemo(() => createStyles(isDark), [isDark]);
+
+  // Set blue StatusBar when this screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      StatusBar.setBarStyle('light-content');
+      if (Platform.OS === 'android') {
+        StatusBar.setBackgroundColor(isDark ? '#0F172A' : Colors.primary);
+        StatusBar.setTranslucent(false);
+      }
+    }, [isDark])
+  );
 
   const [chapter, setChapter] = useState<ChapterDoc | null>(null);
   const [loading, setLoading] = useState(true);
@@ -216,7 +233,7 @@ export default function McqIntroScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color="#4F46E5" />
+        <ActivityIndicator color="#074e87" />
         <Text style={styles.helperText}>Loading MCQs…</Text>
       </View>
     );
@@ -303,7 +320,7 @@ const createStyles = (isDark: boolean) =>
       paddingVertical: 4,
       borderRadius: 999,
       backgroundColor: isDark ? '#1D243A' : '#EEF2FF',
-      color: '#4F46E5',
+      color: '#074e87',
       fontSize: 11,
       fontWeight: '600',
       marginBottom: 8,
@@ -336,7 +353,7 @@ const createStyles = (isDark: boolean) =>
     // primary button
     primaryBtn: {
       marginTop: 4,
-      backgroundColor: '#4F46E5',
+      backgroundColor: '#074e87',
       borderRadius: 12,
       paddingVertical: 12,
       alignItems: 'center',

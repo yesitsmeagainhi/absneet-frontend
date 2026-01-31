@@ -257,18 +257,21 @@
 //   });
 
 // src/screens/MCQ/SelectUnitsOrChaptersScreen.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 
-import { useTheme } from '../../theme/ThemeContext';
+import { useTheme, Colors } from '../../theme/ThemeContext';
 
 // 🔹 Firestore (modular, real-time)
 import { db } from '../../firebase';
@@ -293,6 +296,17 @@ export default function SelectUnitsOrChaptersScreen({
 
   const { isDark } = useTheme();
   const styles = useMemo(() => createStyles(isDark), [isDark]);
+
+  // Set blue StatusBar when this screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      StatusBar.setBarStyle('light-content');
+      if (Platform.OS === 'android') {
+        StatusBar.setBackgroundColor(isDark ? '#0F172A' : Colors.primary);
+        StatusBar.setTranslucent(false);
+      }
+    }, [isDark])
+  );
 
   const [subjectName, setSubjectName] = useState<string>('');
   const [unitsCount, setUnitsCount] = useState<number>(0);
@@ -565,7 +579,7 @@ const createStyles = (isDark: boolean) =>
       marginTop: 14,
       paddingVertical: 12,
       borderRadius: 999,
-      backgroundColor: '#6D28D9',
+      backgroundColor: '#074e87',
       alignItems: 'center',
     },
     primaryBtnText: {

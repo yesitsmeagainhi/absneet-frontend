@@ -18,6 +18,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../navigation/rootnavigator';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { Colors } from '../../theme/ThemeContext';
 
 // 🔹 Firestore imports
 import firestore from '@react-native-firebase/firestore';
@@ -148,7 +149,7 @@ export default function SignUpScreen({ navigation }: Props) {
     const cityName = city.trim();
 
     // ✅ synthetic email for Firebase Auth
-    const email = `${mobile}@absneet.app`;
+    const email = `${mobile}@topinexam.app`;
 
     try {
       setLoading(true);
@@ -204,8 +205,8 @@ export default function SignUpScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       {/* Top colored header strip */}
       <View style={styles.headerStrip}>
-        <Text style={styles.appTitle}>ABS NEET</Text>
-        <Text style={styles.appSubtitle}>Join the NEET toppers community</Text>
+        <Text style={styles.appTitle}>Top in Exam</Text>
+        <Text style={styles.appSubtitle}>Join the toppers community</Text>
       </View>
 
       <KeyboardAvoidingView
@@ -396,8 +397,8 @@ export default function SignUpScreen({ navigation }: Props) {
     </SafeAreaView>
   );
 }
-const GREEN = '#22C55E';
-const PURPLE = '#4F46E5';
+const PRIMARY = Colors.primary;    // Deep Blue
+const ACCENT = Colors.accent;      // Vibrant Orange
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
@@ -408,18 +409,18 @@ const styles = StyleSheet.create({
   headerStrip: {
     paddingHorizontal: 20,
     paddingVertical: 18,
-    backgroundColor: GREEN,
+    backgroundColor: PRIMARY,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
   appTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#064E3B',
+    color: '#FFFFFF',
   },
   appSubtitle: {
     fontSize: 12,
-    color: '#064E3B',
+    color: '#FFFFFF',
     marginTop: 4,
   },
 
@@ -535,10 +536,10 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingVertical: 12,
     alignItems: 'center',
-    backgroundColor: PURPLE,
+    backgroundColor: PRIMARY,
   },
   primaryBtnPressed: {
-    backgroundColor: '#4338CA',
+    backgroundColor: Colors.primaryDark,
   },
   primaryBtnDisabled: {
     opacity: 0.6,
@@ -562,7 +563,7 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 12,
     fontWeight: '600',
-    color: GREEN,
+    color: ACCENT,
   },
   passwordRow: {
     flexDirection: 'row',

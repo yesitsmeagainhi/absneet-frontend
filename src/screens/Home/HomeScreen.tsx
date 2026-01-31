@@ -1928,7 +1928,10 @@ import {
   Linking,
   BackHandler,
   Alert,
-  ActivityIndicator, // 👈 added for loader
+  ActivityIndicator,
+  useWindowDimensions,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import {
   useNavigation,
@@ -1944,8 +1947,11 @@ import auth from '@react-native-firebase/auth';
 import { db } from '../../services/firebase.native';
 
 import { RootStackParamList } from '../../navigation/rootnavigator';
-import { useTheme } from '../../theme/ThemeContext';
+import { useTheme, Colors } from '../../theme/ThemeContext';
 import { SUBJECTS } from '../../data/demo';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useNotifications } from '../../context/NotificationContext';
+import NotificationBadge from '../../components/NotificationBadge';
 
 // Curved arrow asset
 const ArrowWaveUp = require('../../assets/intro/arrow_wave_up.png');
@@ -1953,7 +1959,7 @@ const ArrowWaveUp = require('../../assets/intro/arrow_wave_up.png');
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 // 🔑 bumped version so new build shows tips once
-const HOME_INTRO_KEY = 'absneet_home_intro_seen_v5';
+const HOME_INTRO_KEY = 'topinexam_home_intro_seen_v5';
 
 const TIP_CARD_HEIGHT = 150;      // approximate height of the tip card
 const WAVE_ARROW_HEIGHT = 80;     // approximate arrow image height
@@ -2009,6 +2015,87 @@ type SubjectItem = {
   slug?: string;
   active?: boolean;
   unitCount: number;
+  chapterCount: number;
+  color: string;  // Random color for the initial letter block
+};
+
+// Random pastel colors for subject initials
+const SUBJECT_COLORS = [
+  '#4ADE80', // Green
+  '#FBBF24', // Amber
+  '#F87171', // Red
+  '#60A5FA', // Blue
+  '#A78BFA', // Purple
+  '#FB923C', // Orange
+  '#2DD4BF', // Teal
+  '#F472B6', // Pink
+];
+
+// Get a consistent color based on subject id (so it doesn't change on re-render)
+const getSubjectColor = (id: string): string => {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return SUBJECT_COLORS[Math.abs(hash) % SUBJECT_COLORS.length];
+};
+
+// Subject-specific icons mapping (keywords to icon names)
+const SUBJECT_ICON_KEYWORDS: Array<{ keywords: string[]; icon: string }> = [
+  { keywords: ['physics', 'physical'], icon: 'atom' },
+  { keywords: ['chemistry', 'chemical', 'chem'], icon: 'flask' },
+  { keywords: ['biology', 'bio', 'life science'], icon: 'dna' },
+  { keywords: ['botany', 'plant', 'flora'], icon: 'leaf' },
+  { keywords: ['zoology', 'animal', 'fauna', 'zoo'], icon: 'paw' },
+  { keywords: ['mathematics', 'math', 'maths', 'algebra', 'calculus', 'geometry'], icon: 'calculator-variant' },
+  { keywords: ['english', 'language', 'grammar', 'literature'], icon: 'alphabetical' },
+  { keywords: ['hindi', 'sanskrit', 'urdu'], icon: 'abjad-hindi' },
+  { keywords: ['history', 'historical'], icon: 'book-clock' },
+  { keywords: ['geography', 'geo', 'earth'], icon: 'earth' },
+  { keywords: ['economics', 'economy', 'finance'], icon: 'chart-line' },
+  { keywords: ['political', 'politics', 'civics'], icon: 'account-group' },
+  { keywords: ['computer', 'programming', 'coding', 'it', 'software'], icon: 'laptop' },
+  { keywords: ['science', 'general science'], icon: 'flask-outline' },
+  { keywords: ['social', 'sociology'], icon: 'account-multiple' },
+  { keywords: ['psychology', 'mental'], icon: 'head-cog' },
+  { keywords: ['environment', 'ecology', 'environmental'], icon: 'tree' },
+  { keywords: ['anatomy', 'human body'], icon: 'human' },
+  { keywords: ['physiology'], icon: 'heart-pulse' },
+  { keywords: ['biochem', 'biochemistry'], icon: 'molecule' },
+  { keywords: ['organic'], icon: 'hexagon-multiple' },
+  { keywords: ['inorganic'], icon: 'diamond-stone' },
+  { keywords: ['mechanics', 'motion'], icon: 'cog' },
+  { keywords: ['optics', 'light'], icon: 'lightbulb-on' },
+  { keywords: ['electricity', 'electric', 'current'], icon: 'flash' },
+  { keywords: ['magnetism', 'magnetic'], icon: 'magnet' },
+  { keywords: ['thermodynamics', 'heat', 'thermal'], icon: 'thermometer' },
+  { keywords: ['genetics', 'gene', 'heredity'], icon: 'dna' },
+  { keywords: ['evolution'], icon: 'human-handsup' },
+  { keywords: ['cell', 'cellular'], icon: 'circle-slice-8' },
+  { keywords: ['microbiology', 'microbe', 'bacteria'], icon: 'bacteria' },
+];
+
+// Get icon name for a subject (checks keywords in name)
+const getSubjectIcon = (name: string, id: string): string => {
+  const searchText = `${name} ${id}`.toLowerCase();
+
+  for (const { keywords, icon } of SUBJECT_ICON_KEYWORDS) {
+    for (const keyword of keywords) {
+      if (searchText.includes(keyword)) {
+        return icon;
+      }
+    }
+  }
+
+  return 'book-open-variant'; // Default icon
+};
+
+// Get time-based greeting
+const getGreeting = (): string => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good Morning,';
+  if (hour < 17) return 'Good Afternoon,';
+  return 'Good Evening,';
 };
 
 type BannerItem = {
@@ -2022,6 +2109,8 @@ type BannerItem = {
 export default function HomeScreen() {
   const nav = useNavigation<Nav>();
   const { isDark, toggleTheme } = useTheme();
+  const { width: screenWidth } = useWindowDimensions();
+  const { unreadCount } = useNotifications();
 
   // 🔹 Subjects from Firestore (with unit count)
   const [subjects, setSubjects] = useState<SubjectItem[]>([]);
@@ -2032,20 +2121,51 @@ export default function HomeScreen() {
     { id: string; data: any }[]
   >([]);
   const [unitCounts, setUnitCounts] = useState<Record<string, number>>({});
+  const [chapterCounts, setChapterCounts] = useState<Record<string, number>>({});
 
   // 🔹 Banners from Firestore (nodes, type = 'banner')
   const [banners, setBanners] = useState<BannerItem[]>([]);
   const [bannersError, setBannersError] = useState<string | null>(null);
   const [bannersLoading, setBannersLoading] = useState(true); // 👈 loading flag
   const [brokenBannerIds, setBrokenBannerIds] = useState<string[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // 🔹 Logout overlay flag
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
+  // 🔹 Account popup state
+  const [showAccountPopup, setShowAccountPopup] = useState(false);
+  const [userName, setUserName] = useState<string>('');
+
   const firstSubjectId = subjects[0]?.id;
   const isSubjectDependentDisabled = !firstSubjectId;
 
-  const styles = useMemo(() => createStyles(isDark), [isDark]);
+  const styles = useMemo(() => createStyles(isDark, screenWidth), [isDark, screenWidth]);
+
+  // 🔹 Fetch user name from Firestore
+  useEffect(() => {
+    const fetchUserName = async () => {
+      try {
+        const currentUser = auth().currentUser;
+        if (!currentUser) return;
+
+        const userDoc = await db.collection('users').doc(currentUser.uid).get();
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          setUserName(data?.name || data?.displayName || currentUser.email || 'User');
+        } else {
+          // Fallback to email or display name from auth
+          setUserName(currentUser.displayName || currentUser.email || 'User');
+        }
+      } catch (error) {
+        console.log('[HomeScreen] Error fetching user name:', error);
+        const currentUser = auth().currentUser;
+        setUserName(currentUser?.displayName || currentUser?.email || 'User');
+      }
+    };
+
+    fetchUserName();
+  }, []);
 
   // 🔹 anchors for dynamic positioning (intro tips)
   const [anchors, setAnchors] = useState({
@@ -2092,6 +2212,27 @@ export default function HomeScreen() {
         },
       );
 
+    // 2️⃣ Live chapters → build subjectId -> chapter count map
+    const unsubscribeChapters = nodesRef
+      .where('type', '==', 'chapter')
+      .onSnapshot(
+        snapshot => {
+          const counts: Record<string, number> = {};
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data() as any;
+            const subjectId = data.subjectId as string | undefined;
+            if (!subjectId) return;
+            counts[subjectId] = (counts[subjectId] ?? 0) + 1;
+          });
+
+          setChapterCounts(counts);
+          console.log('[HOME] chapterCounts =', counts);
+        },
+        error => {
+          console.warn('[HOME] chapters onSnapshot error', error);
+        },
+      );
+
     // 2️⃣ Live subjects
     const unsubscribeSubjects = nodesRef
       .where('type', '==', 'subject')
@@ -2104,12 +2245,18 @@ export default function HomeScreen() {
             console.log('[HOME] no Firestore subjects, using demo SUBJECTS');
 
             // 🔁 fallback to local demo data
-            const demoSubjects: SubjectItem[] = SUBJECTS.map((s, idx) => ({
-              id: s.id,
-              name: s.name,
-              order: idx,
-              unitCount: s.units?.length ?? 0,
-            }));
+            const demoSubjects: SubjectItem[] = SUBJECTS.map((s, idx) => {
+              // Count chapters across all units
+              const chapCount = s.units?.reduce((acc, u) => acc + (u.chapters?.length ?? 0), 0) ?? 0;
+              return {
+                id: s.id,
+                name: s.name,
+                order: idx,
+                unitCount: s.units?.length ?? 0,
+                chapterCount: chapCount,
+                color: getSubjectColor(s.id),
+              };
+            });
 
             setRawSubjects([]);
             setSubjects(demoSubjects);
@@ -2134,12 +2281,17 @@ export default function HomeScreen() {
             'Failed to load subjects from cloud. Showing demo data.',
           );
 
-          const demoSubjects: SubjectItem[] = SUBJECTS.map((s, idx) => ({
-            id: s.id,
-            name: s.name,
-            order: idx,
-            unitCount: s.units?.length ?? 0,
-          }));
+          const demoSubjects: SubjectItem[] = SUBJECTS.map((s, idx) => {
+            const chapCount = s.units?.reduce((acc, u) => acc + (u.chapters?.length ?? 0), 0) ?? 0;
+            return {
+              id: s.id,
+              name: s.name,
+              order: idx,
+              unitCount: s.units?.length ?? 0,
+              chapterCount: chapCount,
+              color: getSubjectColor(s.id),
+            };
+          });
 
           setRawSubjects([]);
           setSubjects(demoSubjects);
@@ -2149,12 +2301,13 @@ export default function HomeScreen() {
 
     // 🔙 Clean up listeners when HomeScreen unmounts
     return () => {
-      console.log('[HOME] unsubscribing from live subjects + units');
+      console.log('[HOME] unsubscribing from live subjects + units + chapters');
       unsubscribeUnits();
+      unsubscribeChapters();
       unsubscribeSubjects();
     };
   }, []);
-  // 🔁 Whenever rawSubjects or unitCounts change, build final subjects list
+  // 🔁 Whenever rawSubjects, unitCounts, or chapterCounts change, build final subjects list
   useEffect(() => {
     if (!rawSubjects.length) {
       // When we are using demo subjects or no Firestore subjects,
@@ -2169,10 +2322,12 @@ export default function HomeScreen() {
       slug: data.slug,
       active: data.active ?? true,
       unitCount: unitCounts[id] ?? 0,
+      chapterCount: chapterCounts[id] ?? 0,
+      color: getSubjectColor(id),
     }));
 
     setSubjects(items);
-  }, [rawSubjects, unitCounts]);
+  }, [rawSubjects, unitCounts, chapterCounts]);
 
   // 🔥 REAL-TIME banners from Firestore (nodes type = 'banner')
   useEffect(() => {
@@ -2263,6 +2418,22 @@ export default function HomeScreen() {
     }
     setShowIntro(false);
   }, []);
+
+  // 🔄 Refresh handler for TOP IN EXAM badge
+  const handleRefresh = useCallback(() => {
+    if (isRefreshing) return; // prevent double-tap
+    setIsRefreshing(true);
+    // Trigger loading states to show visual feedback
+    setSubjectsLoading(true);
+    setBannersLoading(true);
+    // The real-time listeners will set loading to false when data arrives
+    // Add a fallback timeout in case data is already cached
+    setTimeout(() => {
+      setIsRefreshing(false);
+      setSubjectsLoading(false);
+      setBannersLoading(false);
+    }, 800);
+  }, [isRefreshing]);
 
   const handleIntroOk = useCallback(() => {
     if (introStep < INTRO_STEPS.length - 1) {
@@ -2416,7 +2587,7 @@ export default function HomeScreen() {
     useCallback(() => {
       const onBackPress = () => {
         Alert.alert(
-          'Exit ABS NEET',
+          'Exit Top in Exam',
           'Are you sure you want to close the app?',
           [
             { text: 'Cancel', style: 'cancel' },
@@ -2454,6 +2625,26 @@ export default function HomeScreen() {
     </View>
   );
 
+  // 🔹 Set white StatusBar immediately on mount
+  useEffect(() => {
+    StatusBar.setBarStyle(isDark ? 'light-content' : 'dark-content');
+    if (Platform.OS === 'android') {
+      StatusBar.setBackgroundColor(isDark ? '#0F172A' : '#FFFFFF');
+      StatusBar.setTranslucent(false);
+    }
+  }, [isDark]);
+
+  // 🔹 Also set white StatusBar when this screen is focused (for tab switches)
+  useFocusEffect(
+    useCallback(() => {
+      StatusBar.setBarStyle(isDark ? 'light-content' : 'dark-content');
+      if (Platform.OS === 'android') {
+        StatusBar.setBackgroundColor(isDark ? '#0F172A' : '#FFFFFF');
+        StatusBar.setTranslucent(false);
+      }
+    }, [isDark])
+  );
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <View style={styles.root}>
@@ -2470,37 +2661,89 @@ export default function HomeScreen() {
               setAnchors(prev => ({ ...prev, topAreaY: y + height }));
             }}
           >
-            {/* Top app bar */}
-            <View style={styles.topBar}>
-              <View>
-                <Text style={styles.appTitle}>NEET-EXAM</Text>
-                <Text style={styles.appSubtitle}>Practice for NEET</Text>
-              </View>
+            {/* Header Container with white background */}
+            <View style={styles.headerContainer}>
+              {/* Top app bar - Modern Design */}
+              <View style={styles.topBar}>
+              {/* Left: NEET-EXAM badge - Tap to refresh */}
+              <Pressable
+                onPress={handleRefresh}
+                style={({ pressed }) => [
+                  styles.neetBadge,
+                  pressed && styles.neetBadgePressed,
+                  isRefreshing && styles.neetBadgeRefreshing,
+                ]}
+              >
+                {isRefreshing ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.neetBadgeText}>TOP IN EXAM</Text>
+                )}
+              </Pressable>
 
+              {/* Right: Icons row */}
               <View style={styles.topRightRow}>
-                {/* Logout button */}
+                {/* Theme toggle */}
                 <Pressable
-                  onPress={handleLogout}
+                  onPress={toggleTheme}
                   style={({ pressed }) => [
-                    styles.logoutBtn,
-                    pressed && styles.logoutBtnPressed,
+                    styles.headerIconBtn,
+                    pressed && styles.headerIconBtnPressed,
                   ]}
                 >
-                  <Text style={styles.logoutText}>Logout</Text>
+                  {isDark ? (
+                    <Icon name="white-balance-sunny" size={20} color="#F59E0B" />
+                  ) : (
+                    <Icon name="moon-waxing-crescent" size={20} color="#374151" style={{ transform: [{ rotate: '+30deg' }] }} />
+                  )}
                 </Pressable>
 
-                {/* Theme toggle */}
-                <Pressable onPress={toggleTheme} style={styles.themeToggle}>
-                  <Text style={styles.themeToggleText}>
-                    {isDark ? '☀️ Light' : '🌙 Dark'}
-                  </Text>
+                {/* Notification bell */}
+                <Pressable
+                  onPress={() => nav.navigate('Notifications')}
+                  style={({ pressed }) => [
+                    styles.headerIconBtn,
+                    pressed && styles.headerIconBtnPressed,
+                  ]}
+                >
+                  <Icon name="bell-outline" size={20} color={isDark ? '#9CA3AF' : '#374151'} />
+                  <NotificationBadge count={unreadCount} />
                 </Pressable>
 
-                <View style={styles.neetBadge}>
-                  <Text style={styles.neetBadgeText}>NEET 2025</Text>
-                </View>
+                {/* Account button */}
+                <Pressable
+                  onPress={() => setShowAccountPopup(true)}
+                  style={({ pressed }) => [
+                    styles.accountBtn,
+                    pressed && styles.accountBtnPressed,
+                  ]}
+                >
+                  <Icon name="account-circle" size={32} color={Colors.accent} />
+                </Pressable>
               </View>
             </View>
+
+            {/* Greeting Section with Search Button */}
+            <View style={styles.greetingRow}>
+              {/* Left: Greeting Text */}
+              <View style={styles.greetingTextContainer}>
+                <Text style={styles.greetingText}>Ignite your potential,</Text>
+                <Text style={styles.userName}>{'Student'}</Text>
+              </View>
+
+              {/* Right: Search Button */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.searchIconBtn,
+                  pressed && styles.searchIconBtnPressed,
+                ]}
+                onPress={() => nav.navigate('Search')}
+              >
+                <Icon name="magnify" size={22} color="#FFFFFF" />
+              </Pressable>
+            </View>
+            </View>
+            {/* End of Header Container */}
 
             {/* Banner slider from Firestore */}
             <View style={styles.bannerWrap}>
@@ -2579,7 +2822,9 @@ export default function HomeScreen() {
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Your Subjects</Text>
               {!!subjects.length && !subjectsLoading && (
-                <Text style={styles.sectionMeta}>{subjects.length} loaded</Text>
+                <Pressable onPress={() => nav.navigate('SubjectView')}>
+                  <Text style={styles.viewAllLink}>View All</Text>
+                </Pressable>
               )}
             </View>
 
@@ -2591,7 +2836,7 @@ export default function HomeScreen() {
               <View style={styles.empty}>
                 <Text style={styles.emptyTitle}>Loading subjects…</Text>
                 <Text style={styles.emptySubtitle}>
-                  Fetching from ABS NEET cloud.
+                  Fetching from Top in Exam cloud.
                 </Text>
               </View>
             ) : subjects.length === 0 ? (
@@ -2610,21 +2855,33 @@ export default function HomeScreen() {
                 keyExtractor={s => s.id}
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingRight: 16 }}
+                contentContainerStyle={{ gap: 12, paddingRight: 16 }}
                 renderItem={({ item }) => (
                   <Pressable
                     style={({ pressed }) => [
                       styles.subjectCard,
                       pressed && styles.subjectCardPressed,
+                      { borderBottomColor: item.color },
                     ]}
                     onPress={() =>
                       nav.navigate('SubjectDetail', { subjectId: item.id })
                     }
                   >
+                    {/* Icon container */}
+                    <View style={[styles.subjectIconContainer, { backgroundColor: item.color + '20' }]}>
+                      <Icon
+                        name={getSubjectIcon(item.name, item.id)}
+                        size={28}
+                        color={item.color}
+                      />
+                    </View>
+
+                    {/* Subject name */}
                     <Text style={styles.subjectTitle}>{item.name}</Text>
+
+                    {/* Chapter count */}
                     <Text style={styles.subjectMeta}>
-                      {item.unitCount}{' '}
-                      {item.unitCount === 1 ? 'unit' : 'units'}
+                      {item.chapterCount} {item.chapterCount === 1 ? 'Chapter' : 'Chapters'}
                     </Text>
                   </Pressable>
                 )}
@@ -2642,7 +2899,7 @@ export default function HomeScreen() {
             {/* Practice modes / quick actions */}
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Practice Modes</Text>
-              <Text style={styles.sectionMeta}>Choose how you want to study</Text>
+              {/* <Text style={styles.sectionMeta}>Choose how you want to study</Text> */}
             </View>
 
             <View style={styles.cardGrid}>
@@ -2669,10 +2926,10 @@ export default function HomeScreen() {
                   nav.navigate('CustomMCQQuiz', { subjectId: firstSubjectId })
                 }
               >
-                <Text style={styles.modeEmoji}>🧠</Text>
+                <Icon name="brain" size={24} color="#FFFFFF" style={styles.modeIcon} />
                 <Text style={styles.modeTitlePrimary}>Custom MCQ Quiz</Text>
                 <Text style={styles.modeTextPrimary}>
-                  Build a quiz from selected topics of a subject.
+                  Target weak topics
                 </Text>
                 {isSubjectDependentDisabled && (
                   <Text style={styles.modeHintPrimary}>
@@ -2690,13 +2947,12 @@ export default function HomeScreen() {
                 ]}
                 onPress={() => nav.navigate('PYQSubjects')}
               >
-                <Text style={styles.modeEmoji}>📜</Text>
+                <Icon name="calendar-clock" size={24} color="#EA580C" style={styles.modeIcon} />
                 <Text style={styles.modeTitle}>Previous Year MCQ</Text>
                 <Text style={styles.modeText}>
-                  Solve full NEET-style mixed MCQ sets
-                  {'\n'}(Physics + Chemistry + Biology).
+                  Real exam practice
                 </Text>
-                <Text style={styles.modeHint}>Best for real exam practice</Text>
+                <Text style={styles.modeHint}></Text>
               </Pressable>
 
               {/* Previous Year MCQ Papers PDF */}
@@ -2708,10 +2964,10 @@ export default function HomeScreen() {
                 ]}
                 onPress={() => nav.navigate('PYQPdfPapers')}
               >
-                <Text style={styles.modeEmoji}>📂</Text>
+                <Icon name="file-pdf-box" size={24} color="#DC2626" style={styles.modeIcon} />
                 <Text style={styles.modeTitle}>PYQ Papers (PDF)</Text>
                 <Text style={styles.modeText}>
-                  Download complete NEET papers in PDF for offline solving.
+                  PDF library
                 </Text>
                 <Text style={styles.modeHint}>Use with OMR sheets</Text>
               </Pressable>
@@ -2725,12 +2981,12 @@ export default function HomeScreen() {
                 ]}
                 onPress={() => nav.navigate('MockTestPapers')}
               >
-                <Text style={styles.modeEmoji}>📝</Text>
+                <Icon name="clipboard-text-clock-outline" size={24} color="#10B981" style={styles.modeIcon} />
                 <Text style={styles.modeTitle}>Mock Test Papers</Text>
                 <Text style={styles.modeText}>
-                  Attempt full-length mock tests and track improvement.
+                  Full-length papers
                 </Text>
-                <Text style={styles.modeHint}>Perfect for weekend practice</Text>
+                <Text style={styles.modeHint}></Text>
               </Pressable>
             </View>
           </View>
@@ -2819,13 +3075,48 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* 🔹 Account popup overlay */}
+        {showAccountPopup && (
+          <Pressable
+            style={styles.accountOverlay}
+            onPress={() => setShowAccountPopup(false)}
+          >
+            <View style={styles.accountPopup}>
+              {/* User info */}
+              <View style={styles.accountHeader}>
+                <Icon name="account-circle" size={48} color={isDark ? '#93C5FD' : Colors.primary} />
+                <Text style={styles.accountName}>{userName || 'User'}</Text>
+                <Text style={styles.accountEmail}>{auth().currentUser?.email || ''}</Text>
+              </View>
+
+              {/* Divider */}
+              <View style={styles.accountDivider} />
+
+              {/* Logout option */}
+              <Pressable
+                onPress={() => {
+                  setShowAccountPopup(false);
+                  handleLogout();
+                }}
+                style={({ pressed }) => [
+                  styles.accountOption,
+                  pressed && styles.accountOptionPressed,
+                ]}
+              >
+                <Icon name="logout" size={20} color={isDark ? '#F87171' : '#DC2626'} />
+                <Text style={styles.accountOptionText}>Logout</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        )}
+
         {/* 🔹 Logout confirmation overlay */}
         {showLogoutConfirm && (
           <View style={styles.logoutOverlay}>
             <View style={styles.logoutCard}>
               <Text style={styles.logoutTitle}>Logout</Text>
               <Text style={styles.logoutMessage}>
-                Do you really want to logout from ABS NEET?
+                Do you really want to logout from
               </Text>
 
               <View style={styles.logoutButtonsRow}>
@@ -2858,11 +3149,11 @@ export default function HomeScreen() {
 }
 
 /** 🎨 Themed styles – dark & light with safe area */
-const createStyles = (isDark: boolean) =>
+const createStyles = (isDark: boolean, screenWidth: number = 360) =>
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor: isDark ? '#020617' : '#F3F4F6',
+      backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
     },
     root: {
       flex: 1,
@@ -2873,43 +3164,116 @@ const createStyles = (isDark: boolean) =>
       backgroundColor: isDark ? '#020617' : '#F3F4F6',
     },
     c: {
-      padding: 16,
+      paddingHorizontal: Math.max(12, screenWidth * 0.04),
+      paddingTop: 0,
       gap: 16,
       paddingBottom: 28,
     },
 
-    // Top bar
+    // Header container with white background
+    headerContainer: {
+      backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
+      marginHorizontal: -Math.max(12, screenWidth * 0.04),
+      paddingHorizontal: Math.max(12, screenWidth * 0.04),
+      paddingBottom: 16,
+      borderBottomLeftRadius: 20,
+      borderBottomRightRadius: 20,
+      shadowColor: '#000',
+      shadowOpacity: isDark ? 0 : 0.05,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: isDark ? 0 : 3,
+    },
+
+    // Top bar - Modern Design
     topBar: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: 6,
+      paddingVertical: 8,
+      marginBottom: 8,
+    },
+    // Greeting row with search button on right
+    greetingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 8,
+      marginBottom: 12,
+    },
+    greetingTextContainer: {
+      flex: 1,
+    },
+    greetingText: {
+      fontSize: 24,
+      fontWeight: '100',
+      color: isDark ? '#F9FAFB' : '#111827',
+    },
+    userName: {
+      fontSize: 24,
+      fontWeight: '600',
+      color: Colors.primary,
+      marginTop: -2,
+    },
+    greetingSubtext: {
+      fontSize: 13,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      marginTop: 4,
+    },
+    // Search icon button (circular, on right of greeting)
+    searchIconBtn: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: Colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: Colors.primary,
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 4,
+    },
+    searchIconBtnPressed: {
+      backgroundColor: Colors.accent,
+      transform: [{ scale: 0.95 }],
     },
     topRightRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 4,
     },
-    appTitle: {
-      fontSize: 18,
-      fontWeight: '800',
-      color: isDark ? '#F9FAFB' : '#111827',
+    headerIconBtn: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? '#1E293B' : '#EEF2FF',
+      borderWidth: 1,
+      borderColor: isDark ? '#334155' : '#E0E7FF',
     },
-    appSubtitle: {
-      fontSize: 12,
-      color: isDark ? '#9CA3AF' : '#6B7280',
-      marginTop: 2,
+    headerIconBtnPressed: {
+      backgroundColor: isDark ? '#334155' : '#DBEAFE',
     },
     neetBadge: {
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 999,
-      backgroundColor: '#22C55E',
+      paddingHorizontal: 12,
+      paddingVertical: 5,
+      borderRadius: 8,
+      backgroundColor: Colors.primary,
     },
     neetBadgeText: {
-      color: '#022C22',
-      fontSize: 11,
+      color: '#FFFFFF',
+      fontSize: 12,
       fontWeight: '700',
+      letterSpacing: 0.5,
+    },
+    neetBadgePressed: {
+      opacity: 0.8,
+      transform: [{ scale: 0.96 }],
+    },
+    neetBadgeRefreshing: {
+      paddingHorizontal: 16,
     },
 
     themeToggle: {
@@ -2923,11 +3287,12 @@ const createStyles = (isDark: boolean) =>
     themeToggleText: {
       fontSize: 11,
       fontWeight: '600',
-      color: isDark ? '#E5E7EB' : '#1D4ED8',
+      color: '#000000',
     },
 
     // Banner slider
     bannerWrap: {
+      marginTop: 16,
       marginBottom: 4,
     },
     bannerScroll: {
@@ -2938,8 +3303,8 @@ const createStyles = (isDark: boolean) =>
       opacity: 0.9,
     },
     bannerCard: {
-      width: 320,
-      height: 150,
+      width: Math.min(screenWidth * 0.85, 340),
+      height: Math.max(140, screenWidth * 0.4),
       marginRight: 12,
       borderRadius: 18,
       overflow: 'hidden',
@@ -3017,6 +3382,11 @@ const createStyles = (isDark: boolean) =>
       fontSize: 12,
       color: isDark ? '#9CA3AF' : '#6B7280',
     },
+    viewAllLink: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: Colors.primary,
+    },
 
     errorText: {
       fontSize: 11,
@@ -3046,36 +3416,46 @@ const createStyles = (isDark: boolean) =>
       color: isDark ? '#E5E7EB' : '#111827',
     },
 
-    // Subject cards
+    // Subject cards (horizontal scroll) - responsive width
     subjectCard: {
-      minWidth: 130,
-      minHeight: 80,
-      paddingVertical: 10,
-      paddingHorizontal: 12,
+      width: Math.max(100, Math.min(screenWidth * 0.28, 120)),
+      alignItems: 'center',
+      paddingVertical: 16,
+      paddingHorizontal: 10,
       borderRadius: 14,
-      marginRight: 10,
-      backgroundColor: isDark ? '#020617' : '#FFFFFF',
+      backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
       borderWidth: 1,
-      borderColor: isDark ? '#374151' : '#E5E7EB',
+      borderColor: isDark ? '#334155' : '#E5E7EB',
+      borderBottomWidth: 3,
       shadowColor: '#000',
-      shadowOpacity: isDark ? 0 : 0.06,
-      shadowRadius: 5,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: isDark ? 0 : 1,
+      shadowOpacity: isDark ? 0 : 0.08,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: isDark ? 0 : 3,
     },
     subjectCardPressed: {
-      backgroundColor: isDark ? '#111827' : '#EEF2FF',
-      borderColor: isDark ? '#4B5563' : '#C7D2FE',
+      backgroundColor: isDark ? '#334155' : '#F8FAFC',
+      transform: [{ scale: 0.96 }],
+    },
+    subjectIconContainer: {
+      width: Math.max(44, Math.min(screenWidth * 0.13, 52)),
+      height: Math.max(44, Math.min(screenWidth * 0.13, 52)),
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 10,
     },
     subjectTitle: {
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: '600',
       color: isDark ? '#F9FAFB' : '#111827',
+      textAlign: 'center',
+      marginBottom: 4,
     },
     subjectMeta: {
       fontSize: 11,
       color: isDark ? '#9CA3AF' : '#6B7280',
-      marginTop: 2,
+      textAlign: 'center',
     },
 
     // Practice modes grid
@@ -3092,13 +3472,13 @@ const createStyles = (isDark: boolean) =>
       borderWidth: 1,
     },
 
-    // Purple primary card
+    // Primary card (Blue)
     modeCardPrimary: {
-      backgroundColor: '#4F46E5',
-      borderColor: '#4338CA',
+      backgroundColor: Colors.primary,
+      borderColor: Colors.primaryDark,
     },
     modeCardPrimaryPressed: {
-      backgroundColor: '#4338CA',
+      backgroundColor: Colors.primaryDark,
     },
     modeTitlePrimary: {
       fontSize: 14,
@@ -3116,13 +3496,13 @@ const createStyles = (isDark: boolean) =>
       marginTop: 6,
     },
 
-    // Accent card (Previous Year MCQ)
+    // Accent card (Previous Year MCQ) - Orange theme
     modeCardAccent: {
-      backgroundColor: isDark ? '#0F172A' : '#DBEAFE',
-      borderColor: isDark ? '#38BDF8' : '#1D4ED8',
+      backgroundColor: isDark ? '#1C1917' : '#FFF7ED',
+      borderColor: isDark ? Colors.accent : Colors.accentDark,
     },
     modeCardAccentPressed: {
-      backgroundColor: isDark ? '#0B1220' : '#BFDBFE',
+      backgroundColor: isDark ? '#292524' : '#FFEDD5',
     },
 
     // Neutral cards (PDF, Mock)
@@ -3140,6 +3520,9 @@ const createStyles = (isDark: boolean) =>
     modeEmoji: {
       fontSize: 20,
       marginBottom: 4,
+    },
+    modeIcon: {
+      marginBottom: 6,
     },
     modeTitle: {
       fontSize: 14,
@@ -3188,7 +3571,7 @@ const createStyles = (isDark: boolean) =>
       paddingHorizontal: 8,
       paddingVertical: 3,
       borderRadius: 999,
-      backgroundColor: '#4F46E5',
+      backgroundColor: Colors.primary,
     },
     introTitle: {
       fontSize: 14,
@@ -3228,10 +3611,10 @@ const createStyles = (isDark: boolean) =>
       paddingHorizontal: 14,
       paddingVertical: 6,
       borderRadius: 999,
-      backgroundColor: '#4F46E5',
+      backgroundColor: Colors.primary,
     },
     introPrimaryBtnPressed: {
-      backgroundColor: '#4338CA',
+      backgroundColor: Colors.primaryDark,
     },
     introPrimaryText: {
       fontSize: 11,
@@ -3346,5 +3729,74 @@ const createStyles = (isDark: boolean) =>
       fontSize: 12,
       color: '#FEF2F2',
       fontWeight: '600',
+    },
+
+    // Account button styles
+    accountBtn: {
+      padding: 4,
+    },
+    accountBtnPressed: {
+      opacity: 0.7,
+    },
+
+    // Account popup overlay styles
+    accountOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'flex-start',
+      alignItems: 'flex-end',
+      paddingTop: 60,
+      paddingRight: 16,
+    },
+    accountPopup: {
+      backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
+      borderRadius: 16,
+      padding: 16,
+      minWidth: 220,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      elevation: 8,
+    },
+    accountHeader: {
+      alignItems: 'center',
+      paddingBottom: 12,
+    },
+    accountName: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: isDark ? '#F9FAFB' : '#111827',
+      marginTop: 8,
+    },
+    accountEmail: {
+      fontSize: 12,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      marginTop: 2,
+    },
+    accountDivider: {
+      height: 1,
+      backgroundColor: isDark ? '#334155' : '#E5E7EB',
+      marginVertical: 12,
+    },
+    accountOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: 8,
+      borderRadius: 8,
+    },
+    accountOptionPressed: {
+      backgroundColor: isDark ? '#334155' : '#F3F4F6',
+    },
+    accountOptionText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: isDark ? '#F87171' : '#DC2626',
+      marginLeft: 12,
     },
   });

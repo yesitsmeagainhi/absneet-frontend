@@ -447,8 +447,8 @@ export default function CustomMCQSolveScreen({ route, navigation }: Props) {
               let txt = '#111';
 
               if (isSelected) {
-                bg = '#EDE9FE';
-                border = '#6D28D9';
+                bg = '#E0F2FE';
+                border = '#074e87';
               }
 
               return (
@@ -502,8 +502,8 @@ export default function CustomMCQSolveScreen({ route, navigation }: Props) {
                   let txt = '#111';
 
                   if (isSelected && !submitted) {
-                    bg = '#EDE9FE';
-                    border = '#6D28D9';
+                    bg = '#E0F2FE';
+                    border = '#074e87';
                   }
 
                   if (submitted) {
@@ -699,7 +699,7 @@ const styles = StyleSheet.create({
     flex: 1.2,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: '#6D28D9',
+    backgroundColor: '#074e87',
     alignItems: 'center',
   },
   navBtnPrimaryText: {
@@ -709,7 +709,7 @@ const styles = StyleSheet.create({
   },
 
   startBtn: {
-    backgroundColor: '#6D28D9',
+    backgroundColor: '#074e87',
     padding: 14,
     borderRadius: 12,
     alignItems: 'center',

@@ -1,15 +1,18 @@
 // src/screens/Subject/SubjectDetailScreen.tsx
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, useCallback } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     Pressable,
+    StatusBar,
+    Platform,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 import { SUBJECTS, Subject } from '../../data/demo';
-import { useTheme } from '../../theme/ThemeContext';
+import { useTheme, Colors } from '../../theme/ThemeContext';
 
 // 🔹 Firestore (React Native Firebase)
 import firestore, {
@@ -30,6 +33,17 @@ export default function SubjectDetailScreen({ route, navigation }: Props) {
     const { subjectId } = route.params;
     const { isDark } = useTheme();
     const styles = useMemo(() => createStyles(isDark), [isDark]);
+
+    // 🔹 Set blue StatusBar when this screen is focused
+    useFocusEffect(
+        useCallback(() => {
+            StatusBar.setBarStyle('light-content');
+            if (Platform.OS === 'android') {
+                StatusBar.setBackgroundColor(isDark ? '#0F172A' : Colors.primary);
+                StatusBar.setTranslucent(false);
+            }
+        }, [isDark])
+    );
 
     // 🔹 State from Firestore
     const [subjectDoc, setSubjectDoc] = useState<SubjectDoc | null>(null);
@@ -198,13 +212,13 @@ const createStyles = (isDark: boolean) =>
             borderWidth: 1,
         },
 
-        // Primary (purple) card – like Custom MCQ Quiz
+        // Primary (blue) card – like Custom MCQ Quiz
         modeCardPrimary: {
-            backgroundColor: '#4F46E5',
-            borderColor: '#4338CA',
+            backgroundColor: Colors.primary,
+            borderColor: Colors.primaryDark,
         },
         modeCardPrimaryPressed: {
-            backgroundColor: '#4338CA',
+            backgroundColor: Colors.primaryDark,
         },
 
         // Neutral card

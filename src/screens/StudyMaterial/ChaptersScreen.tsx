@@ -380,7 +380,7 @@
 
 
 // src/screens/subject/ChaptersScreen.tsx
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
     View,
     Text,
@@ -388,8 +388,11 @@ import {
     FlatList,
     TouchableOpacity,
     ActivityIndicator,
+    StatusBar,
+    Platform,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 
 import { db } from '../../firebase'; // ⬅️ web SDK db (your existing setup)
@@ -402,7 +405,7 @@ import {
 } from 'firebase/firestore';
 import firestore from '@react-native-firebase/firestore';
 
-import { useTheme } from '../../theme/ThemeContext';
+import { useTheme, Colors } from '../../theme/ThemeContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Chapters'>;
 
@@ -419,6 +422,17 @@ export default function ChaptersScreen({ route, navigation }: Props) {
 
     const { isDark } = useTheme();
     const styles = useMemo(() => createStyles(isDark), [isDark]);
+
+    // Set blue StatusBar when this screen is focused
+    useFocusEffect(
+        useCallback(() => {
+            StatusBar.setBarStyle('light-content');
+            if (Platform.OS === 'android') {
+                StatusBar.setBackgroundColor(isDark ? '#0F172A' : Colors.primary);
+                StatusBar.setTranslucent(false);
+            }
+        }, [isDark])
+    );
 
     const [chapters, setChapters] = useState<ChapterNode[]>([]);
     const [loading, setLoading] = useState(true);
@@ -612,7 +626,7 @@ const createStyles = (isDark: boolean) =>
             position: 'absolute',
             bottom: 24,
             right: 24,
-            backgroundColor: '#4F46E5',
+            backgroundColor: '#074e87',
             paddingVertical: 10,
             paddingHorizontal: 18,
             borderRadius: 999,

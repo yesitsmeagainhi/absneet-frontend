@@ -1,13 +1,27 @@
-import React, { useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useMemo, useCallback } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, StatusBar, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/RootNavigator';
 import { PYQ_PAPERS } from '../../data/demo';
+import { useTheme, Colors } from '../../theme/ThemeContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PYQYears'>;
 
 export default function PYQYearsScreen({ route, navigation }: Props) {
   const { subjectId, subjectName } = route.params;
+  const { isDark } = useTheme();
+
+  // Set blue StatusBar for this screen
+  useFocusEffect(
+    useCallback(() => {
+      StatusBar.setBarStyle('light-content');
+      if (Platform.OS === 'android') {
+        StatusBar.setBackgroundColor(isDark ? '#0F172A' : Colors.primary);
+        StatusBar.setTranslucent(false);
+      }
+    }, [isDark])
+  );
 
   // All papers for this subject
   const subjectPapers = useMemo(

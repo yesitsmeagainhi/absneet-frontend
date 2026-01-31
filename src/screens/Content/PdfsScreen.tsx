@@ -113,8 +113,8 @@
 //         alignItems: 'center' as const,
 //         justifyContent: 'center' as const,
 //     },
-// };// src/screens/Content/PdfsScreen.tsx 
-import React, { useEffect, useState, useMemo } from 'react';
+// };// src/screens/Content/PdfsScreen.tsx
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
     View,
     Text,
@@ -122,11 +122,13 @@ import {
     ActivityIndicator,
     TouchableOpacity,
     StyleSheet,
+    StatusBar,
+    Platform,
 } from 'react-native';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
-import { useTheme } from '../../theme/ThemeContext';
+import { useTheme, Colors } from '../../theme/ThemeContext';
 
 // ✅ use web Firestore SDK with onSnapshot
 import { db } from '../../firebase';
@@ -157,6 +159,17 @@ export default function PdfsScreen() {
 
     const { isDark } = useTheme();
     const styles = useMemo(() => createStyles(isDark), [isDark]);
+
+    // Set blue StatusBar when this screen is focused
+    useFocusEffect(
+        useCallback(() => {
+            StatusBar.setBarStyle('light-content');
+            if (Platform.OS === 'android') {
+                StatusBar.setBackgroundColor(isDark ? '#0F172A' : Colors.primary);
+                StatusBar.setTranslucent(false);
+            }
+        }, [isDark])
+    );
 
     const [chapterName, setChapterName] = useState<string>('Chapter PDFs');
     const [pdfs, setPdfs] = useState<FirestorePdf[]>([]);
@@ -248,7 +261,7 @@ export default function PdfsScreen() {
     if (loading) {
         return (
             <View style={styles.center}>
-                <ActivityIndicator color="#4F46E5" />
+                <ActivityIndicator color="#074e87" />
                 <Text style={styles.centerText}>Loading PDFs…</Text>
             </View>
         );

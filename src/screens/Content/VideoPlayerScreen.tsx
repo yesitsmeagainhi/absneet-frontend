@@ -82,9 +82,17 @@ function toPlayable(raw?: string | null): Playable {
             else vid = u.searchParams.get('v') || '';
 
             if (vid) {
+                // Parameters to minimize YouTube UI:
+                // rel=0 - no related videos
+                // modestbranding=1 - minimal YouTube branding
+                // showinfo=0 - hide video title/uploader (deprecated but still helps)
+                // iv_load_policy=3 - hide annotations
+                // disablekb=1 - disable keyboard controls
+                // fs=0 - hide fullscreen button
+                // cc_load_policy=0 - hide captions by default
                 return {
                     mode: 'yt',
-                    url: `https://www.youtube-nocookie.com/embed/${vid}?rel=0&modestbranding=1&playsinline=1&iv_load_policy=3`,
+                    url: `https://www.youtube-nocookie.com/embed/${vid}?rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&showinfo=0&disablekb=0&fs=1&cc_load_policy=0&controls=1`,
                     baseUrl: 'https://www.youtube-nocookie.com',
                 };
             }
@@ -101,13 +109,72 @@ function htmlIframe(src: string): string {
     return `<!doctype html><html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
 <style>
-  html,body{margin:0;height:100%;background:#000}
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
   #wrap{position:fixed;inset:0}
   iframe{width:100%;height:100%;border:0;background:#000}
 </style></head>
 <body><div id="wrap">
-<iframe src="${src}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen></iframe>
-</div></body></html>`;
+<iframe id="ytplayer" src="${src}" allow="accelerometer; autoplay; encrypted-media; gyroscope" allowfullscreen></iframe>
+</div>
+<script>
+  // Inject CSS into YouTube iframe to hide unwanted elements
+  const iframe = document.getElementById('ytplayer');
+  iframe.onload = function() {
+    try {
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      const style = iframeDoc.createElement('style');
+      style.textContent = \`
+        /* Hide YouTube logo watermark */
+        .ytp-watermark,
+        .ytp-youtube-button,
+        .ytp-logo-link,
+        a.ytp-watermark { display: none !important; }
+
+        /* Hide more videos / end screen */
+        .ytp-endscreen-content,
+        .ytp-ce-element,
+        .ytp-ce-covering-overlay,
+        .ytp-ce-element-shadow,
+        .ytp-ce-covering-image,
+        .ytp-ce-expanding-image,
+        .ytp-ce-element.ytp-ce-video,
+        .ytp-ce-element.ytp-ce-channel,
+        .ytp-ce-element.ytp-ce-playlist,
+        .html5-endscreen { display: none !important; }
+
+        /* Hide channel info / video info overlay */
+        .ytp-chrome-top,
+        .ytp-show-cards-title,
+        .ytp-paid-content-overlay,
+        .ytp-info-panel-preview,
+        .iv-promo,
+        .ytp-title-channel,
+        .ytp-title-beacon { display: none !important; }
+
+        /* Hide settings, subtitles buttons */
+        .ytp-settings-button,
+        .ytp-subtitles-button,
+        .ytp-cards-button { display: none !important; }
+
+        /* Hide share/watch later buttons */
+        .ytp-watch-later-button,
+        .ytp-share-button { display: none !important; }
+
+        /* Hide "Watch on YouTube" text */
+        .ytp-impression-link { display: none !important; }
+
+        /* Hide related videos that appear when paused */
+        .ytp-pause-overlay,
+        .ytp-scroll-min { display: none !important; }
+      \`;
+      iframeDoc.head.appendChild(style);
+    } catch(e) {
+      // Cross-origin iframe, cannot inject styles
+      console.log('Cannot inject styles into cross-origin iframe');
+    }
+  };
+</script>
+</body></html>`;
 }
 
 function htmlVideo(src: string): string {
@@ -316,6 +383,57 @@ export default function VideoPlayerScreen({ route }: Props) {
                     domStorageEnabled
                     allowsFullscreenVideo
                     setSupportMultipleWindows={false}
+                    // Prevent navigation to YouTube or other external sites
+                    onShouldStartLoadWithRequest={(request) => {
+                        const url = request.url.toLowerCase();
+                        // Allow the embed and internal navigation
+                        if (url.includes('youtube-nocookie.com/embed') ||
+                            url.includes('youtube.com/embed') ||
+                            url.startsWith('about:') ||
+                            url.startsWith('data:')) {
+                            return true;
+                        }
+                        // Block navigation to YouTube watch pages, channels, etc.
+                        if (url.includes('youtube.com/watch') ||
+                            url.includes('youtube.com/channel') ||
+                            url.includes('youtube.com/user') ||
+                            url.includes('youtu.be/')) {
+                            return false;
+                        }
+                        return true;
+                    }}
+                    // Inject CSS to hide YouTube elements via JavaScript
+                    injectedJavaScript={`
+                        (function() {
+                            // Add CSS to hide YouTube branding elements
+                            var style = document.createElement('style');
+                            style.innerHTML = \`
+                                /* Try to hide YouTube elements through parent document */
+                                .ytp-watermark, .ytp-youtube-button, a[href*="youtube.com"] {
+                                    pointer-events: none !important;
+                                    opacity: 0 !important;
+                                }
+                            \`;
+                            document.head.appendChild(style);
+
+                            // Disable links that try to open YouTube
+                            document.addEventListener('click', function(e) {
+                                var target = e.target;
+                                while (target && target !== document) {
+                                    if (target.tagName === 'A' && target.href &&
+                                        (target.href.includes('youtube.com') || target.href.includes('youtu.be'))) {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        return false;
+                                    }
+                                    target = target.parentNode;
+                                }
+                            }, true);
+
+                            true;
+                        })();
+                    `}
+                    onMessage={() => {}}
                 />
             )}
 

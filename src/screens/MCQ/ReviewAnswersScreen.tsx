@@ -1,16 +1,21 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, StatusBar, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/RootNavigator';
+import { useTheme, Colors } from '../../theme/ThemeContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ReviewAnswers'>;
 
 type Question = {
     id: string;
     q: string;
+    qImage?: string;           // Optional question image URL
     options: string[];
+    optionImages?: string[];   // Optional image URLs for options
     correctIndex: number;
     explanation?: string;
+    explanationImage?: string; // Optional explanation image
 };
 
 export default function ReviewAnswersScreen({ route }: Props) {
@@ -19,6 +24,19 @@ export default function ReviewAnswersScreen({ route }: Props) {
         questions: Question[];
         answers: number[];
     };
+
+    const { isDark } = useTheme();
+
+    // Set blue StatusBar when this screen is focused
+    useFocusEffect(
+        useCallback(() => {
+            StatusBar.setBarStyle('light-content');
+            if (Platform.OS === 'android') {
+                StatusBar.setBackgroundColor(isDark ? '#0F172A' : Colors.primary);
+                StatusBar.setTranslucent(false);
+            }
+        }, [isDark])
+    );
 
     return (
         <View style={styles.c}>
@@ -29,12 +47,28 @@ export default function ReviewAnswersScreen({ route }: Props) {
                     const userChoice = answers[index]; // 0-based index or -1
                     const correctIndex = q.correctIndex;
 
+                    // Check if question image exists and is non-empty
+                    const hasQuestionImage = q.qImage && q.qImage.trim() !== '';
+
                     return (
                         <View key={q.id || index} style={styles.card}>
                             <Text style={styles.qIndex}>Q{index + 1}.</Text>
                             <Text style={styles.qText}>{q.q}</Text>
 
+                            {/* Question Image (if available and non-empty) */}
+                            {hasQuestionImage && (
+                                <Image
+                                    source={{ uri: q.qImage }}
+                                    style={styles.questionImage}
+                                    resizeMode="contain"
+                                />
+                            )}
+
                             {q.options.map((opt, optIndex) => {
+                                // Get option image only if it exists and is non-empty
+                                const optionImage = q.optionImages?.[optIndex] && q.optionImages[optIndex].trim() !== ''
+                                    ? q.optionImages[optIndex]
+                                    : null;
                                 const isCorrect = optIndex === correctIndex;
                                 const isUser = optIndex === userChoice;
 
@@ -62,9 +96,17 @@ export default function ReviewAnswersScreen({ route }: Props) {
                                         <Text style={[styles.optLabel, { color: txt }]}>
                                             {String.fromCharCode(65 + optIndex)}.
                                         </Text>
-                                        <Text style={[styles.optText, { color: txt }]}>
-                                            {opt}
-                                        </Text>
+                                        {optionImage ? (
+                                            <Image
+                                                source={{ uri: optionImage }}
+                                                style={styles.optionImage}
+                                                resizeMode="contain"
+                                            />
+                                        ) : (
+                                            <Text style={[styles.optText, { color: txt }]}>
+                                                {opt}
+                                            </Text>
+                                        )}
                                     </View>
                                 );
                             })}
@@ -87,6 +129,13 @@ export default function ReviewAnswersScreen({ route }: Props) {
                                 <Text style={styles.explText}>
                                     {q.explanation || 'Explanation not available.'}
                                 </Text>
+                                {q.explanationImage && q.explanationImage.trim() !== '' && (
+                                    <Image
+                                        source={{ uri: q.explanationImage }}
+                                        style={styles.explanationImage}
+                                        resizeMode="contain"
+                                    />
+                                )}
                             </View>
                         </View>
                     );
@@ -126,6 +175,25 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: '#111827',
         marginBottom: 8,
+    },
+    questionImage: {
+        width: '100%',
+        height: 180,
+        marginBottom: 12,
+        borderRadius: 8,
+        backgroundColor: '#F3F4F6',
+    },
+    optionImage: {
+        flex: 1,
+        height: 80,
+        borderRadius: 6,
+    },
+    explanationImage: {
+        width: '100%',
+        height: 150,
+        marginTop: 8,
+        borderRadius: 8,
+        backgroundColor: '#F3F4F6',
     },
     optRow: {
         flexDirection: 'row',

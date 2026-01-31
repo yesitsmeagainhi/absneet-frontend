@@ -52,15 +52,22 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import RootNavigator from './src/navigation/rootnavigator';
 import { ThemeProvider } from './src/theme/ThemeContext';
+import { NotificationProvider } from './src/context/NotificationContext';
+
+// Setup Poppins as default font for all Text components
+import { setupDefaultFonts } from './src/utils/setupFonts';
+setupDefaultFonts();
 
 export default function App() {
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <ThemeProvider>
-          <NavigationContainer>
-            <RootNavigator />
-          </NavigationContainer>
+          <NotificationProvider>
+            <NavigationContainer>
+              <RootNavigator />
+            </NavigationContainer>
+          </NotificationProvider>
         </ThemeProvider>
       </GestureHandlerRootView></SafeAreaProvider>
   );

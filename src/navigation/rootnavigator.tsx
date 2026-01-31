@@ -470,6 +470,7 @@ import HomeTabs from './HomeScreen';
 import VideoPlayerScreen from '../screens/Content/VideoPlayerScreen';
 import PdfViewerScreen from '../screens/Content/PdfViewerScreen';
 import SubjectDetailScreen from '../screens/Subject/SubjectDetailScreen';
+import SubjectViewScreen from '../screens/Subject/SubjectViewScreen';
 import UnitsScreen from '../screens/StudyMaterial/UnitsScreen';
 import ChaptersScreen from '../screens/StudyMaterial/ChaptersScreen';
 import SelectUnitsOrChaptersScreen from '../screens/MCQ/SelectUnitsOrChaptersScreen';
@@ -484,12 +485,15 @@ import PYQPapersScreen from '../screens/Papers/PYQPapersScreen';
 import PYQPdfPapersScreen from '../screens/PYQ/PYQPdfPapersScreen';
 import DemoMCQQuizScreen from '../screens/MCQ/DemoMCQQuizScreen';
 import HelpScreen from '../screens/Home/HelpScreen';
+import NotificationsScreen from '../screens/Home/NotificationsScreen';
+import NewsDetailScreen from '../screens/Home/NewsDetailScreen';
 import ContentTabs from './ContentTabs';
 import NewsTestScreen from '../screens/NewsTestScreen';
 import MockTestPapersScreen from '../screens/Papers/MostTestPapersScreen';
+import SearchScreen from '../screens/Search/SearchScreen';
 
 import type { Question } from '../data/demo';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, Colors } from '../theme/ThemeContext';
 
 // 🔹 Firebase Auth + AsyncStorage
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
@@ -511,6 +515,8 @@ export type RootStackParamList = {
     HomeTabs: undefined;
     NewsTest: undefined;
     Help: undefined;
+    Search: undefined;
+    SubjectView: undefined;
     SubjectDetail: { subjectId: string };
     Units: { subjectId: string };
     Chapters: { subjectId: string; unitId: string };
@@ -562,6 +568,21 @@ export type RootStackParamList = {
         answers: number[];
     };
     NewsScreen: {};
+    Notifications: undefined;
+    NewsDetail: {
+        news: {
+            id: string;
+            title: string;
+            subtitle?: string;
+            excerpt?: string;
+            summary?: string;
+            content?: string;
+            coverUrl?: string;
+            bannerUrl?: string;
+            author?: string;
+            createdAt?: number;
+        };
+    };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -620,9 +641,9 @@ export default function RootNavigator() {
         return unsubscribe;
     }, []);
 
-    const headerBg = isDark ? '#0F172A' : '#FFFFFF';
-    const headerText = isDark ? '#F9FAFB' : '#111827';
-    const screenBg = isDark ? '#020617' : '#F9FAFB';
+    const headerBg = isDark ? '#0F172A' : Colors.primary;
+    const headerText = '#FFFFFF'; // White text on blue/dark headers
+    const screenBg = isDark ? '#0F172A' : '#FFFFFF';
 
     // 🔄 Small splash while we decide whether user is logged in
     if (initializing) {
@@ -633,11 +654,8 @@ export default function RootNavigator() {
                     { backgroundColor: screenBg, paddingBottom: insets.bottom },
                 ]}
             >
-                <StatusBar
-                    barStyle={isDark ? 'light-content' : 'dark-content'}
-                    backgroundColor={headerBg}
-                />
-                <ActivityIndicator color={isDark ? '#E5E7EB' : '#4B5563'} />
+                {/* No declarative StatusBar here - let screens manage their own */}
+                <ActivityIndicator color={Colors.accent} />
                 <Text style={[stylesInit.splashText, { color: headerText }]}>
                     Getting everything ready for your NEET prep…
                 </Text>
@@ -647,10 +665,7 @@ export default function RootNavigator() {
 
     return (
         <>
-            <StatusBar
-                barStyle={isDark ? 'light-content' : 'dark-content'}
-                backgroundColor={headerBg}
-            />
+            {/* StatusBar is now managed by individual screens via useFocusEffect */}
             <Stack.Navigator
                 screenOptions={{
                     headerTitleAlign: 'center',
@@ -668,7 +683,7 @@ export default function RootNavigator() {
                         backgroundColor: screenBg,
                         paddingBottom: insets.bottom,
                     },
-                    statusBarStyle: isDark ? 'light' : 'dark',
+                    // Don't set statusBarStyle - let individual screens manage via useFocusEffect
                 }}
             >
                 {!user && (
@@ -712,6 +727,30 @@ export default function RootNavigator() {
                             name="Help"
                             component={HelpScreen}
                             options={{ title: 'Help & Support' }}
+                        />
+
+                        <Stack.Screen
+                            name="Notifications"
+                            component={NotificationsScreen}
+                            options={{ headerShown: false }}
+                        />
+
+                        <Stack.Screen
+                            name="NewsDetail"
+                            component={NewsDetailScreen}
+                            options={{ headerShown: false }}
+                        />
+
+                        <Stack.Screen
+                            name="Search"
+                            component={SearchScreen}
+                            options={{ headerShown: false }}
+                        />
+
+                        <Stack.Screen
+                            name="SubjectView"
+                            component={SubjectViewScreen}
+                            options={{ title: 'All Subjects' }}
                         />
 
                         <Stack.Screen
