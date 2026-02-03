@@ -491,8 +491,11 @@ import ContentTabs from './ContentTabs';
 import NewsTestScreen from '../screens/NewsTestScreen';
 import MockTestPapersScreen from '../screens/Papers/MostTestPapersScreen';
 import SearchScreen from '../screens/Search/SearchScreen';
+import MainScreen from '../screens/Main/MainScreen';
+import MainTabs from './MainTabs';
 
 import type { Question } from '../data/demo';
+import { useExam } from '../context/ExamContext';
 import { useTheme, Colors } from '../theme/ThemeContext';
 
 // 🔹 Firebase Auth + AsyncStorage
@@ -512,6 +515,7 @@ export type CustomMcqQuestionParam = {
 export type RootStackParamList = {
     Login: undefined;
     SignUp: undefined;
+    MainScreen: undefined;
     HomeTabs: undefined;
     NewsTest: undefined;
     Help: undefined;
@@ -595,6 +599,7 @@ const MS_IN_DAY = 1000 * 60 * 60 * 24;
 export default function RootNavigator() {
     const { isDark } = useTheme();
     const insets = useSafeAreaInsets();
+    const { selectedExam, isLoading: examLoading } = useExam();
 
     const [initializing, setInitializing] = React.useState(true);
     const [user, setUser] = React.useState<FirebaseAuthTypes.User | null>(null);
@@ -645,8 +650,8 @@ export default function RootNavigator() {
     const headerText = '#FFFFFF'; // White text on blue/dark headers
     const screenBg = isDark ? '#0F172A' : '#FFFFFF';
 
-    // 🔄 Small splash while we decide whether user is logged in
-    if (initializing) {
+    // 🔄 Small splash while we decide whether user is logged in and exam is loaded
+    if (initializing || examLoading) {
         return (
             <View
                 style={[
@@ -657,16 +662,21 @@ export default function RootNavigator() {
                 {/* No declarative StatusBar here - let screens manage their own */}
                 <ActivityIndicator color={Colors.accent} />
                 <Text style={[stylesInit.splashText, { color: headerText }]}>
-                    Getting everything ready for your NEET prep…
+                    Getting everything ready for your exam prep…
                 </Text>
             </View>
         );
     }
 
+    // Determine initial route for authenticated users
+    // Always show MainScreen first so user can see exam selection or change it
+    const initialRouteName = user ? 'MainScreen' : 'Login';
+
     return (
         <>
             {/* StatusBar is now managed by individual screens via useFocusEffect */}
             <Stack.Navigator
+                initialRouteName={initialRouteName}
                 screenOptions={{
                     headerTitleAlign: 'center',
                     headerStyle: {
@@ -704,7 +714,14 @@ export default function RootNavigator() {
 
                 {user && (
                     <>
-                        {/* Main app once logged in */}
+                        {/* Exam selection screen with bottom tabs */}
+                        <Stack.Screen
+                            name="MainScreen"
+                            component={MainTabs}
+                            options={{ headerShown: false }}
+                        />
+
+                        {/* Main app once exam is selected */}
                         <Stack.Screen
                             name="HomeTabs"
                             component={HomeTabs}

@@ -1,5 +1,5 @@
 // src/screens/Subject/SubjectViewScreen.tsx
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,11 @@ import {
   FlatList,
   Pressable,
   ActivityIndicator,
-} from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+  StatusBar,
+  Platform,
+}
+  from 'react-native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -16,6 +19,7 @@ import { RootStackParamList } from '../../navigation/rootnavigator';
 import { useTheme, Colors } from '../../theme/ThemeContext';
 import { db } from '../../services/firebase.native';
 import { SUBJECTS } from '../../data/demo';
+import { useExam } from '../../context/ExamContext';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -107,11 +111,27 @@ export default function SubjectViewScreen() {
   const [subjects, setSubjects] = useState<SubjectItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { selectedExam } = useExam();
+  // Set StatusBar for this screen
+  useFocusEffect(
+    useCallback(() => {
+      StatusBar.setBarStyle('light-content');  // White icons for blue background
+      if (Platform.OS === 'android') {
+        StatusBar.setBackgroundColor(Colors.primary);  // Blue background
+        StatusBar.setTranslucent(false);
+      }
+    }, [])
+  );
 
   useEffect(() => {
     let isMounted = true;
     setLoading(true);
     setError(null);
+    if (!selectedExam?.id) {
+      setSubjects([]);
+      setLoading(false);
+      return;
+    }
 
     const loadSubjects = async () => {
       try {
@@ -120,6 +140,7 @@ export default function SubjectViewScreen() {
         // Get subjects
         const subjectsSnap = await nodesRef
           .where('type', '==', 'subject')
+          .where('examId', '==', selectedExam?.id)
           .orderBy('order', 'asc')
           .get();
 
@@ -177,6 +198,7 @@ export default function SubjectViewScreen() {
             color: getSubjectColor(docSnap.id),
           };
         });
+        items.sort((a, b) => a.order - b.order);
 
         if (isMounted) {
           setSubjects(items);
@@ -209,7 +231,8 @@ export default function SubjectViewScreen() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [selectedExam?.id]);
+
 
   const renderSubject = ({ item }: { item: SubjectItem }) => (
     <Pressable

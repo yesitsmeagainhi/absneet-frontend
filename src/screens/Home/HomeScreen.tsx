@@ -1926,8 +1926,6 @@ import {
   Image,
   Pressable,
   Linking,
-  BackHandler,
-  Alert,
   ActivityIndicator,
   useWindowDimensions,
   StatusBar,
@@ -1951,6 +1949,7 @@ import { useTheme, Colors } from '../../theme/ThemeContext';
 import { SUBJECTS } from '../../data/demo';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNotifications } from '../../context/NotificationContext';
+import { useExam } from '../../context/ExamContext';
 import NotificationBadge from '../../components/NotificationBadge';
 
 // Curved arrow asset
@@ -1958,51 +1957,36 @@ const ArrowWaveUp = require('../../assets/intro/arrow_wave_up.png');
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-// 🔑 bumped version so new build shows tips once
-const HOME_INTRO_KEY = 'topinexam_home_intro_seen_v5';
+// 🔑 bumped version so new build shows tips once (v6 after MainScreen intro added)
+const HOME_INTRO_KEY = 'topinexam_home_intro_seen_v6';
 
-const TIP_CARD_HEIGHT = 150;      // approximate height of the tip card
-const WAVE_ARROW_HEIGHT = 80;     // approximate arrow image height
+// Responsive sizing - using percentage-based positioning and auto-height cards
 // 👈 change this string to whatever you really use in RootNavigator
 const AUTH_ROOT_ROUTE = 'Auth'; // or 'Login', 'AuthStack', etc.
+
+// Continuous step numbering: HomeScreen continues from MainScreen (Steps 4-6 of 6 total)
+const TOTAL_INTRO_STEPS = 6; // 3 MainScreen + 3 HomeScreen
+const HOME_STEP_OFFSET = 3; // HomeScreen starts at step 4 (after 3 MainScreen steps)
 
 // All tips in sequence
 const INTRO_STEPS = [
   {
     id: 'subjects',
-    title: 'Step 1 • Subjects section',
+    title: 'Subjects section',
     text:
       'Here you will see all your subjects. Scroll this row and tap any subject to open its units, chapters, videos, PDFs and MCQs.',
   },
   {
     id: 'custom_mcq',
-    title: 'Step 2 • Custom MCQ Quiz',
+    title: 'Practice modes',
     text:
-      'Use this mode when you want to build your own quiz from selected topics of a subject. Best for targeted practice on weak areas.',
-  },
-  {
-    id: 'pyq_mcq',
-    title: 'Step 3 • Previous Year MCQ',
-    text:
-      'This mode mixes questions from Physics, Chemistry and Biology like the actual NEET exam. Use it for full-pattern MCQ practice.',
-  },
-  {
-    id: 'pyq_pdf',
-    title: 'Step 4 • PYQ Papers (PDF)',
-    text:
-      'Here you can open and download complete Previous Year NEET papers in PDF format. Use them with OMR sheets for offline practice.',
-  },
-  {
-    id: 'mock_tests',
-    title: 'Step 5 • Mock Test Papers',
-    text:
-      'Mock tests simulate the real exam with full-length papers. Use them weekly to check your timing, accuracy and overall improvement.',
+      'Use these modes when you want to study on extra topics or stuff related to practice. Best for targeted practice on weak areas.',
   },
   {
     id: 'banners_theme',
-    title: 'Step 6 • Banners & Theme toggle',
+    title: 'Theme toggle',
     text:
-      'Top banners show important links, offers and NEET tips. The icon on the top-right switches between Dark and Light mode anytime.',
+      'The icon on the top-right switches between Dark and Light mode anytime.',
   },
 ] as const;
 
@@ -2109,8 +2093,9 @@ type BannerItem = {
 export default function HomeScreen() {
   const nav = useNavigation<Nav>();
   const { isDark, toggleTheme } = useTheme();
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const { unreadCount } = useNotifications();
+  const { selectedExam, clearSelectedExam } = useExam();
 
   // 🔹 Subjects from Firestore (with unit count)
   const [subjects, setSubjects] = useState<SubjectItem[]>([]);
@@ -2183,9 +2168,17 @@ export default function HomeScreen() {
   const [introStep, setIntroStep] = useState(0); // index in INTRO_STEPS
 
   // 🔥 Load subjects + unit counts from Firestore
-  // 🔥 REAL-TIME subjects + unit counts from Firestore
+  // 🔥 REAL-TIME subjects + unit counts from Firestore (filtered by selected exam)
   useEffect(() => {
-    console.log('[HOME] subscribing to live subjects + units...');
+    // Don't fetch if no exam is selected
+    if (!selectedExam) {
+      console.log('[HOME] No exam selected, skipping subjects fetch');
+      setSubjects([]);
+      setSubjectsLoading(false);
+      return;
+    }
+
+    console.log('[HOME] subscribing to live subjects for exam:', selectedExam.id);
     setSubjectsLoading(true);
     setSubjectsError(null);
 
@@ -2233,33 +2226,19 @@ export default function HomeScreen() {
         },
       );
 
-    // 2️⃣ Live subjects
+    // 3️⃣ Live subjects - filtered by selected exam's examId
+    // Query subjects where examId matches the selected exam
     const unsubscribeSubjects = nodesRef
       .where('type', '==', 'subject')
-      .orderBy('order', 'asc')
+      .where('examId', '==', selectedExam.id)
       .onSnapshot(
         snapshot => {
           console.log('[HOME] subjects snapshot size =', snapshot.size);
 
           if (snapshot.empty) {
-            console.log('[HOME] no Firestore subjects, using demo SUBJECTS');
-
-            // 🔁 fallback to local demo data
-            const demoSubjects: SubjectItem[] = SUBJECTS.map((s, idx) => {
-              // Count chapters across all units
-              const chapCount = s.units?.reduce((acc, u) => acc + (u.chapters?.length ?? 0), 0) ?? 0;
-              return {
-                id: s.id,
-                name: s.name,
-                order: idx,
-                unitCount: s.units?.length ?? 0,
-                chapterCount: chapCount,
-                color: getSubjectColor(s.id),
-              };
-            });
-
+            console.log('[HOME] No subjects found for selected exam');
             setRawSubjects([]);
-            setSubjects(demoSubjects);
+            setSubjects([]);
             setSubjectsLoading(false);
             return;
           }
@@ -2273,40 +2252,22 @@ export default function HomeScreen() {
           setSubjectsLoading(false);
         },
         error => {
-          console.warn(
-            '[HOME] subjects onSnapshot error, falling back to demo SUBJECTS',
-            error,
-          );
-          setSubjectsError(
-            'Failed to load subjects from cloud. Showing demo data.',
-          );
-
-          const demoSubjects: SubjectItem[] = SUBJECTS.map((s, idx) => {
-            const chapCount = s.units?.reduce((acc, u) => acc + (u.chapters?.length ?? 0), 0) ?? 0;
-            return {
-              id: s.id,
-              name: s.name,
-              order: idx,
-              unitCount: s.units?.length ?? 0,
-              chapterCount: chapCount,
-              color: getSubjectColor(s.id),
-            };
-          });
-
+          console.warn('[HOME] subjects onSnapshot error:', error);
+          setSubjectsError('Failed to load subjects from cloud.');
           setRawSubjects([]);
-          setSubjects(demoSubjects);
+          setSubjects([]);
           setSubjectsLoading(false);
         },
       );
 
-    // 🔙 Clean up listeners when HomeScreen unmounts
+    // 🔙 Clean up listeners when HomeScreen unmounts or exam changes
     return () => {
       console.log('[HOME] unsubscribing from live subjects + units + chapters');
       unsubscribeUnits();
       unsubscribeChapters();
       unsubscribeSubjects();
     };
-  }, []);
+  }, [selectedExam]); // Re-fetch when selected exam changes
   // 🔁 Whenever rawSubjects, unitCounts, or chapterCounts change, build final subjects list
   useEffect(() => {
     if (!rawSubjects.length) {
@@ -2384,20 +2345,19 @@ export default function HomeScreen() {
   }, []);
 
   // 🔹 Intro flag
+  // Tips show only on first login - flag '1' means already seen
   useEffect(() => {
     const loadIntroFlag = async () => {
       try {
         const flag = await AsyncStorage.getItem(HOME_INTRO_KEY);
 
         console.log('[HOME_INTRO] flag =', flag);
-        // For now: always show tips from step 0
-        // setIntroStep(0);
-        // setShowIntro(true);
 
-        // If later you want "show only once", restore this:
         if (flag === '1') {
+          // Already seen tips - don't show again
           setShowIntro(false);
         } else {
+          // First time - show tips
           setIntroStep(0);
           setShowIntro(true);
         }
@@ -2463,7 +2423,13 @@ export default function HomeScreen() {
 
   const currentStep = INTRO_STEPS[introStep];
 
-  // 🔹 Position + arrow config for each step (dynamic using anchors)
+  // 🔹 Position + arrow config for each step
+  // Using percentage-based positioning for responsiveness across screen sizes
+  // Horizontal padding scales with screen width
+  const horizontalPadding = Math.max(16, screenWidth * 0.04);
+  // Top position for header-related tips (~15% from top)
+  const topAreaPos = screenHeight * 0.15;
+
   const introPos = useMemo(() => {
     if (!currentStep) return undefined;
 
@@ -2471,80 +2437,27 @@ export default function HomeScreen() {
 
     switch (id) {
       case 'subjects':
-        if (!anchors.subjectsY) return undefined;
+        // Position near top, arrow pointing DOWN to subjects section (which is below banners)
         return {
-          wrapper: { left: 16, right: 16, top: anchors.subjectsY + 8 },
-          arrowOnTop: true,
-          arrowOnBottom: false,
+          wrapper: { left: horizontalPadding, right: horizontalPadding, top: screenHeight * 0.22 },
+          arrowOnTop: false,
+          arrowOnBottom: true,
           arrowAlign: 'center' as const,
         };
 
-      case 'custom_mcq': {
-        const targetY = anchors.practiceY;
-        if (!anchors.practiceY || !anchors.subjectsY) return undefined;
-
-        const desiredTop =
-          targetY - (TIP_CARD_HEIGHT + WAVE_ARROW_HEIGHT + 16);
-        const minTop = anchors.subjectsY - 50;
-        const safeTop = Math.max(desiredTop, minTop);
-
+      case 'custom_mcq':
+        // Position higher, arrow pointing down to practice modes section (more space for arrow)
         return {
-          wrapper: { left: 16, right: 16, top: safeTop },
-          arrowOnTop: true,
-          arrowOnBottom: false,
-          arrowAlign: 'flex-start' as const,
-        };
-      }
-
-      case 'pyq_mcq': {
-        if (!anchors.practiceY || !anchors.subjectsY) return undefined;
-
-        const desiredTop = anchors.practiceY - TIP_CARD_HEIGHT - 16;
-        const minTop = anchors.subjectsY + 40;
-        const safeTop = Math.max(desiredTop, minTop);
-
-        return {
-          wrapper: { left: 16, right: 16, top: safeTop },
-          arrowOnTop: true,
-          arrowOnBottom: false,
-          arrowAlign: 'flex-end' as const,
-        };
-      }
-
-      case 'pyq_pdf': {
-        if (!anchors.practiceY || !anchors.subjectsY) return undefined;
-
-        const desiredTop = anchors.practiceY - TIP_CARD_HEIGHT - 406;
-        const minTop = anchors.subjectsY + 60;
-        const safeTop = Math.max(desiredTop, minTop);
-
-        return {
-          wrapper: { left: 16, right: 16, top: safeTop },
+          wrapper: { left: horizontalPadding, right: horizontalPadding, top: screenHeight * 0.48 },
           arrowOnTop: false,
           arrowOnBottom: true,
-          arrowAlign: 'flex-start' as const,
+          arrowAlign: 'center' as const,
         };
-      }
-
-      case 'mock_tests': {
-        if (!anchors.practiceY || !anchors.subjectsY) return undefined;
-
-        const desiredTop = anchors.practiceY - TIP_CARD_HEIGHT - 106;
-        const minTop = anchors.subjectsY + 40;
-        const safeTop = Math.max(desiredTop, minTop);
-
-        return {
-          wrapper: { left: 16, right: 16, top: safeTop },
-          arrowOnTop: false,
-          arrowOnBottom: true,
-          arrowAlign: 'flex-end' as const,
-        };
-      }
 
       case 'banners_theme':
-        if (!anchors.topAreaY) return undefined;
+        // Position near top, arrow pointing up to header
         return {
-          wrapper: { left: 16, right: 16, top: anchors.topAreaY + 8 },
+          wrapper: { left: horizontalPadding, right: horizontalPadding, top: topAreaPos },
           arrowOnTop: true,
           arrowOnBottom: false,
           arrowAlign: 'flex-end' as const,
@@ -2553,7 +2466,7 @@ export default function HomeScreen() {
       default:
         return undefined;
     }
-  }, [currentStep, anchors]);
+  }, [currentStep, screenHeight, screenWidth, horizontalPadding, topAreaPos]);
   // 🔹 Logout handlers (custom overlay)
   const handleLogout = useCallback(() => {
     setShowLogoutConfirm(true);
@@ -2563,9 +2476,11 @@ export default function HomeScreen() {
     setShowLogoutConfirm(false);
 
     try {
-      // ❗ Instead of AsyncStorage.clear(), remove only what you really need.
       // For example: clear the login timestamp so TTL resets.
       await AsyncStorage.removeItem('abs_neet_last_login_at');
+
+      // Clear the selected exam so next login shows MainScreen
+      await clearSelectedExam();
 
       // If you store user email / tokens elsewhere, remove those keys too:
       // await AsyncStorage.multiRemove(['abs_neet_last_login_at', 'user_email', ...]);
@@ -2575,42 +2490,11 @@ export default function HomeScreen() {
     } catch (e) {
       console.warn('Failed to logout:', e);
     }
-  }, []);
+  }, [clearSelectedExam]);
 
   const cancelLogout = useCallback(() => {
     setShowLogoutConfirm(false);
   }, []);
-
-
-  // 🔹 Android back button → confirm exit
-  useFocusEffect(
-    useCallback(() => {
-      const onBackPress = () => {
-        Alert.alert(
-          'Exit Top in Exam',
-          'Are you sure you want to close the app?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Exit',
-              style: 'destructive',
-              onPress: () => BackHandler.exitApp(),
-            },
-          ],
-        );
-        return true; // prevent default back behaviour
-      };
-
-      const subscription = BackHandler.addEventListener(
-        'hardwareBackPress',
-        onBackPress,
-      );
-
-      return () => {
-        subscription.remove();
-      };
-    }, []),
-  );
 
 
 
@@ -2665,83 +2549,83 @@ export default function HomeScreen() {
             <View style={styles.headerContainer}>
               {/* Top app bar - Modern Design */}
               <View style={styles.topBar}>
-              {/* Left: NEET-EXAM badge - Tap to refresh */}
-              <Pressable
-                onPress={handleRefresh}
-                style={({ pressed }) => [
-                  styles.neetBadge,
-                  pressed && styles.neetBadgePressed,
-                  isRefreshing && styles.neetBadgeRefreshing,
-                ]}
-              >
-                {isRefreshing ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.neetBadgeText}>TOP IN EXAM</Text>
-                )}
-              </Pressable>
-
-              {/* Right: Icons row */}
-              <View style={styles.topRightRow}>
-                {/* Theme toggle */}
+                {/* Left: Exam badge - Tap to change exam */}
                 <Pressable
-                  onPress={toggleTheme}
+                  onPress={() => nav.navigate('MainScreen')}
                   style={({ pressed }) => [
-                    styles.headerIconBtn,
-                    pressed && styles.headerIconBtnPressed,
+                    styles.neetBadge,
+                    pressed && styles.neetBadgePressed,
                   ]}
                 >
-                  {isDark ? (
-                    <Icon name="white-balance-sunny" size={20} color="#F59E0B" />
-                  ) : (
-                    <Icon name="moon-waxing-crescent" size={20} color="#374151" style={{ transform: [{ rotate: '+30deg' }] }} />
-                  )}
+                  <View style={styles.examBadgeRow}>
+                    <Text style={styles.neetBadgeText}>
+                      {selectedExam?.shortName || 'SELECT EXAM'}
+                    </Text>
+                    <Icon name="chevron-down" size={16} color="#FFFFFF" style={{ marginLeft: 4 }} />
+                  </View>
                 </Pressable>
 
-                {/* Notification bell */}
-                <Pressable
-                  onPress={() => nav.navigate('Notifications')}
-                  style={({ pressed }) => [
-                    styles.headerIconBtn,
-                    pressed && styles.headerIconBtnPressed,
-                  ]}
-                >
-                  <Icon name="bell-outline" size={20} color={isDark ? '#9CA3AF' : '#374151'} />
-                  <NotificationBadge count={unreadCount} />
-                </Pressable>
+                {/* Right: Icons row */}
+                <View style={styles.topRightRow}>
+                  {/* Theme toggle */}
+                  <Pressable
+                    onPress={toggleTheme}
+                    style={({ pressed }) => [
+                      styles.headerIconBtn,
+                      pressed && styles.headerIconBtnPressed,
+                    ]}
+                  >
+                    {isDark ? (
+                      <Icon name="white-balance-sunny" size={20} color="#F59E0B" />
+                    ) : (
+                      <Icon name="moon-waxing-crescent" size={20} color="#374151" style={{ transform: [{ rotate: '+30deg' }] }} />
+                    )}
+                  </Pressable>
 
-                {/* Account button */}
-                <Pressable
-                  onPress={() => setShowAccountPopup(true)}
-                  style={({ pressed }) => [
-                    styles.accountBtn,
-                    pressed && styles.accountBtnPressed,
-                  ]}
-                >
-                  <Icon name="account-circle" size={32} color={Colors.accent} />
-                </Pressable>
-              </View>
-            </View>
+                  {/* Notification bell */}
+                  <Pressable
+                    onPress={() => nav.navigate('Notifications')}
+                    style={({ pressed }) => [
+                      styles.headerIconBtn,
+                      pressed && styles.headerIconBtnPressed,
+                    ]}
+                  >
+                    <Icon name="bell-outline" size={20} color={isDark ? '#9CA3AF' : '#374151'} />
+                    <NotificationBadge count={unreadCount} />
+                  </Pressable>
 
-            {/* Greeting Section with Search Button */}
-            <View style={styles.greetingRow}>
-              {/* Left: Greeting Text */}
-              <View style={styles.greetingTextContainer}>
-                <Text style={styles.greetingText}>Ignite your potential,</Text>
-                <Text style={styles.userName}>{'Student'}</Text>
+                  {/* Account button */}
+                  <Pressable
+                    onPress={() => setShowAccountPopup(true)}
+                    style={({ pressed }) => [
+                      styles.accountIconBtn,
+                      pressed && { opacity: 0.7 },
+                    ]}
+                  >
+                    <Icon name="account-circle" size={42} color={Colors.accent} />
+                  </Pressable>
+                </View>
               </View>
 
-              {/* Right: Search Button */}
-              <Pressable
-                style={({ pressed }) => [
-                  styles.searchIconBtn,
-                  pressed && styles.searchIconBtnPressed,
-                ]}
-                onPress={() => nav.navigate('Search')}
-              >
-                <Icon name="magnify" size={22} color="#FFFFFF" />
-              </Pressable>
-            </View>
+              {/* Greeting Section with Search Button */}
+              <View style={styles.greetingRow}>
+                {/* Left: Greeting Text */}
+                <View style={styles.greetingTextContainer}>
+                  <Text style={styles.greetingText}>Ignite your potential,</Text>
+                  <Text style={styles.userName}>{'Student'}</Text>
+                </View>
+
+                {/* Right: Search Button */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.searchIconBtn,
+                    pressed && styles.searchIconBtnPressed,
+                  ]}
+                  onPress={() => nav.navigate('Search')}
+                >
+                  <Icon name="magnify" size={22} color="#FFFFFF" />
+                </Pressable>
+              </View>
             </View>
             {/* End of Header Container */}
 
@@ -3024,7 +2908,7 @@ export default function HomeScreen() {
               <View style={styles.introCard} pointerEvents="auto">
                 <View style={styles.introHeaderRow}>
                   <Text style={styles.introStepBadge}>
-                    {introStep + 1}/{INTRO_STEPS.length}
+                    {HOME_STEP_OFFSET + introStep + 1}/{TOTAL_INTRO_STEPS}
                   </Text>
                   <Text style={styles.introTitle}>{currentStep.title}</Text>
                 </View>
@@ -3084,14 +2968,29 @@ export default function HomeScreen() {
             <View style={styles.accountPopup}>
               {/* User info */}
               <View style={styles.accountHeader}>
-                <Icon name="account-circle" size={48} color={isDark ? '#93C5FD' : Colors.primary} />
-                <Text style={styles.accountName}>{userName || 'User'}</Text>
-                <Text style={styles.accountEmail}>{auth().currentUser?.email || ''}</Text>
+                <Icon name="account-circle" size={48} color={isDark ? '#93C5FD' : Colors.primary} /><Text style={styles.accountName}>{userName || 'User'}</Text>
+                {/* <Text style={styles.accountEmail}>{auth().currentUser?.email || ''}</Text> */}
               </View>
 
               {/* Divider */}
               <View style={styles.accountDivider} />
 
+              {/* Help & Support option */}
+              <Pressable
+                onPress={() => {
+                  setShowAccountPopup(false);
+                  nav.navigate('Help');
+                }}
+                style={({ pressed }) => [
+                  styles.accountOption,
+                  pressed && styles.accountOptionPressed,
+                ]}
+              >
+                <Icon name="help-circle-outline" size={20} color={isDark ? '#9CA3AF' : '#6B7280'} />
+                <Text style={styles.accountOptionTextNormal}>Help & Support</Text>
+              </Pressable>
+
+              <View style={styles.accountDivider} />
               {/* Logout option */}
               <Pressable
                 onPress={() => {
@@ -3256,6 +3155,12 @@ const createStyles = (isDark: boolean, screenWidth: number = 360) =>
     headerIconBtnPressed: {
       backgroundColor: isDark ? '#334155' : '#DBEAFE',
     },
+    accountIconBtn: {
+      width: 42,
+      height: 42,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     neetBadge: {
       paddingHorizontal: 12,
       paddingVertical: 5,
@@ -3274,6 +3179,10 @@ const createStyles = (isDark: boolean, screenWidth: number = 360) =>
     },
     neetBadgeRefreshing: {
       paddingHorizontal: 16,
+    },
+    examBadgeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
     },
 
     themeToggle: {
@@ -3551,9 +3460,10 @@ const createStyles = (isDark: boolean, screenWidth: number = 360) =>
     introCardWrapper: {
       position: 'absolute',
     },
+    // Auto-height card with responsive padding
     introCard: {
-      borderRadius: 16,
-      padding: 14,
+      borderRadius: Math.max(14, screenWidth * 0.04),
+      padding: Math.max(12, screenWidth * 0.04),
       backgroundColor: isDark ? '#020617' : '#FFFFFF',
       borderWidth: 1,
       borderColor: isDark ? '#1F2937' : '#E5E7EB',
@@ -3561,39 +3471,40 @@ const createStyles = (isDark: boolean, screenWidth: number = 360) =>
     introHeaderRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 6,
-      gap: 8,
+      marginBottom: Math.max(4, screenWidth * 0.015),
+      gap: Math.max(6, screenWidth * 0.02),
     },
+    // Responsive font sizes based on screen width
     introStepBadge: {
-      fontSize: 11,
+      fontSize: Math.max(10, Math.min(13, screenWidth * 0.03)),
       fontWeight: '700',
       color: '#F9FAFB',
-      paddingHorizontal: 8,
-      paddingVertical: 3,
+      paddingHorizontal: Math.max(6, screenWidth * 0.02),
+      paddingVertical: Math.max(2, screenWidth * 0.008),
       borderRadius: 999,
       backgroundColor: Colors.primary,
     },
     introTitle: {
-      fontSize: 14,
+      fontSize: Math.max(13, Math.min(17, screenWidth * 0.04)),
       fontWeight: '700',
       color: isDark ? '#F9FAFB' : '#111827',
       flexShrink: 1,
     },
     introText: {
-      fontSize: 12,
+      fontSize: Math.max(11, Math.min(15, screenWidth * 0.035)),
       color: isDark ? '#E5E7EB' : '#4B5563',
-      marginTop: 2,
-      lineHeight: 18,
+      marginTop: Math.max(2, screenWidth * 0.005),
+      lineHeight: Math.max(16, Math.min(22, screenWidth * 0.05)),
     },
     introButtonsRow: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
-      marginTop: 10,
-      gap: 8,
+      marginTop: Math.max(8, screenWidth * 0.025),
+      gap: Math.max(6, screenWidth * 0.02),
     },
     introSecondaryBtn: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
+      paddingHorizontal: Math.max(10, screenWidth * 0.03),
+      paddingVertical: Math.max(5, screenWidth * 0.015),
       borderRadius: 999,
       borderWidth: 1,
       borderColor: isDark ? '#4B5563' : '#D1D5DB',
@@ -3603,13 +3514,13 @@ const createStyles = (isDark: boolean, screenWidth: number = 360) =>
       backgroundColor: isDark ? '#111827' : '#F3F4F6',
     },
     introSecondaryText: {
-      fontSize: 11,
+      fontSize: Math.max(10, Math.min(13, screenWidth * 0.03)),
       color: isDark ? '#E5E7EB' : '#4B5563',
       fontWeight: '500',
     },
     introPrimaryBtn: {
-      paddingHorizontal: 14,
-      paddingVertical: 6,
+      paddingHorizontal: Math.max(12, screenWidth * 0.035),
+      paddingVertical: Math.max(5, screenWidth * 0.015),
       borderRadius: 999,
       backgroundColor: Colors.primary,
     },
@@ -3617,30 +3528,30 @@ const createStyles = (isDark: boolean, screenWidth: number = 360) =>
       backgroundColor: Colors.primaryDark,
     },
     introPrimaryText: {
-      fontSize: 11,
+      fontSize: Math.max(10, Math.min(13, screenWidth * 0.03)),
       color: '#F9FAFB',
       fontWeight: '600',
     },
 
-    // 🔹 Arrow styles for curved PNG
+    // 🔹 Arrow styles for curved PNG - responsive sizing
     arrowRow: {
       width: '100%',
       flexDirection: 'row',
-      marginTop: -40,
+      marginTop: -Math.max(30, screenWidth * 0.1),
       marginBottom: 0,
     },
     waveArrowImageTop: {
-      width: 90,
-      height: 90,
+      width: Math.max(70, Math.min(100, screenWidth * 0.25)),
+      height: Math.max(70, Math.min(100, screenWidth * 0.25)),
       resizeMode: 'contain',
-      marginBottom: -10,
+      marginBottom: -Math.max(8, screenWidth * 0.025),
     },
     waveArrowImageBottom: {
-      width: 90,
-      height: 90,
+      width: Math.max(70, Math.min(100, screenWidth * 0.25)),
+      height: Math.max(70, Math.min(100, screenWidth * 0.25)),
       resizeMode: 'contain',
       transform: [{ rotate: '180deg' }],
-      marginTop: -10,
+      marginTop: -Math.max(8, screenWidth * 0.025),
     },
 
     // 🔹 Logout button (top bar)
@@ -3764,14 +3675,16 @@ const createStyles = (isDark: boolean, screenWidth: number = 360) =>
       elevation: 8,
     },
     accountHeader: {
+      flexDirection: 'column',
       alignItems: 'center',
-      paddingBottom: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      gap: 8,
     },
     accountName: {
       fontSize: 16,
       fontWeight: '700',
       color: isDark ? '#F9FAFB' : '#111827',
-      marginTop: 8,
     },
     accountEmail: {
       fontSize: 12,
@@ -3793,6 +3706,12 @@ const createStyles = (isDark: boolean, screenWidth: number = 360) =>
     accountOptionPressed: {
       backgroundColor: isDark ? '#334155' : '#F3F4F6',
     },
+    accountOptionTextNormal: {
+      fontSize: 14,
+      color: isDark ? '#E5E7EB' : '#374151',
+      marginLeft: 4,
+    },
+
     accountOptionText: {
       fontSize: 14,
       fontWeight: '600',

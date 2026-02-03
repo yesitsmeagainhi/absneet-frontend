@@ -1,7 +1,5 @@
-
-
 // src/screens/Auth/SignUpScreen.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,18 +11,23 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Animated,
+  Keyboard,
+  Image,
+  StatusBar,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../../navigation/rootnavigator';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../../theme/ThemeContext';
 
-// 🔹 Firestore imports
+// Firestore imports
 import firestore from '@react-native-firebase/firestore';
 import { db } from '../../services/firebase.native';
 
-// ✅ Firebase Auth
+// Firebase Auth
 import auth from '@react-native-firebase/auth';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
@@ -32,11 +35,14 @@ type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
 type FormErrors = {
   number?: string;
   pass?: string;
-  edu?: string;
   city?: string;
 };
 
-// 🔹 City suggestions (you can extend this list anytime)
+// Color constants
+const BLUE = Colors.primary;       // #074e87
+const ORANGE = Colors.accent;      // #fc720a
+
+// City suggestions
 const CITY_OPTIONS = [
   'Mumbai',
   'Thane',
@@ -66,29 +72,82 @@ export default function SignUpScreen({ navigation }: Props) {
   const [errors, setErrors] = useState<FormErrors>({});
   const [showCitySuggestions, setShowCitySuggestions] = useState(false);
   const [showPass, setShowPass] = useState(false);
-
-  // 🔹 Global error banner message
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  // Filtered city suggestions based on typed text
+  // Animation refs
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const logoScale = useRef(new Animated.Value(0.8)).current;
+  const formSlide = useRef(new Animated.Value(50)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+
+  // Set StatusBar for this screen
+  useFocusEffect(
+    useCallback(() => {
+      StatusBar.setBarStyle('dark-content');
+      if (Platform.OS === 'android') {
+        StatusBar.setBackgroundColor('#EFF6FF');
+        StatusBar.setTranslucent(false);
+      }
+    }, [])
+  );
+
+  // Entrance animations
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(logoScale, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(formSlide, {
+        toValue: 0,
+        duration: 600,
+        delay: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  // Shake animation for errors
+  const triggerShake = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  };
+
+  // Filtered city suggestions
   const filteredCities = useMemo(() => {
     const q = city.trim().toLowerCase();
     if (q.length < 2) return [];
-    return CITY_OPTIONS.filter(c =>
-      c.toLowerCase().includes(q),
-    );
+    return CITY_OPTIONS.filter(c => c.toLowerCase().includes(q));
   }, [city]);
 
   const validate = (): boolean => {
     const newErrors: FormErrors = {};
     const trimmedNumber = number.trim();
     const trimmedPass = pass.trim();
-    const trimmedEdu = edu.trim();
     const trimmedCity = city.trim();
 
     setGlobalError(null);
 
-    // 🔹 Mobile validation
+    // Mobile validation
     if (!trimmedNumber) {
       newErrors.number = 'Mobile number is required.';
     } else if (!/^\d+$/.test(trimmedNumber)) {
@@ -97,98 +156,80 @@ export default function SignUpScreen({ navigation }: Props) {
       newErrors.number = 'Mobile number must be exactly 10 digits.';
     }
 
-    // 🔹 Password validation
+    // Password validation
     if (!trimmedPass) {
       newErrors.pass = 'Password is required.';
     } else if (trimmedPass.length < 6) {
       newErrors.pass = 'Password should be at least 6 characters.';
     }
 
-    // 🔹 Education validation
-    if (!trimmedEdu) {
-      newErrors.edu = 'Please enter your current course / class.';
-    } else if (trimmedEdu.length < 3) {
-      newErrors.edu = 'Education description looks too short.';
-    }
-
-    // 🔹 City validation
+    // City validation
     if (!trimmedCity) {
       newErrors.city = 'Please enter your city.';
     }
 
+    // Education is now optional - no validation needed
+
     setErrors(newErrors);
 
-    const errorKeys = Object.keys(newErrors);
-    const errorCount = errorKeys.length;
-
+    const errorCount = Object.keys(newErrors).length;
     if (errorCount > 0) {
-      let message: string;
-
-      if (errorCount === 1) {
-        const onlyError = (Object.values(newErrors)[0] as string) || '';
-        message = onlyError || 'Please correct the highlighted field.';
-      } else {
-        message =
-          'Some details look incorrect. Please correct the fields or check your input.';
-      }
-
+      const message = errorCount === 1
+        ? Object.values(newErrors)[0] || 'Please check your input.'
+        : 'Please fill in all required fields correctly.';
       setGlobalError(message);
+      triggerShake();
       return false;
     }
 
-    setGlobalError(null);
     return true;
   };
 
   const handleSignUp = async () => {
+    Keyboard.dismiss();
     if (!validate()) return;
 
     const mobile = number.trim();
     const password = pass.trim();
-    const education = edu.trim();
+    const education = edu.trim(); // Optional, can be empty
     const cityName = city.trim();
-
-    // ✅ synthetic email for Firebase Auth
     const email = `${mobile}@topinexam.app`;
 
     try {
       setLoading(true);
 
-      // 1️⃣ Create user in Firebase Auth
+      // Create user in Firebase Auth
       const cred = await auth().createUserWithEmailAndPassword(email, password);
       const { uid } = cred.user;
 
-      // 2️⃣ Save profile in Firestore (users/{uid})
+      // Save profile in Firestore
       await db.collection('users').doc(uid).set({
         uid,
         mobile,
-        education,
+        education: education || null, // Store null if empty
         city: cityName,
         createdAt: firestore.FieldValue.serverTimestamp(),
       });
 
-      // reset errors & banner
       setErrors({});
       setGlobalError(null);
 
-      // 3️⃣ Navigate into app
       navigation.reset({
         index: 0,
         routes: [{ name: 'HomeTabs' }],
       });
     } catch (err: any) {
-      console.warn('SignUp FirebaseAuth/Firestore error:', err);
+      console.warn('SignUp error:', err);
 
-      let msg =
-        'Something went wrong while creating your account. Please try again.';
-
+      let msg = 'Something went wrong. Please try again.';
       if (err.code === 'auth/email-already-in-use') {
-        msg = 'An account with this mobile number already exists. Please login.';
+        msg = 'This mobile number is already registered. Please login.';
       } else if (err.code === 'auth/weak-password') {
-        msg = 'Password is too weak. Please use at least 6 characters.';
+        msg = 'Password is too weak. Use at least 6 characters.';
       }
 
       setGlobalError(msg);
+      triggerShake();
       Alert.alert('Sign up failed', msg);
     } finally {
       setLoading(false);
@@ -202,381 +243,640 @@ export default function SignUpScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      {/* Top colored header strip */}
-      <View style={styles.headerStrip}>
-        <Text style={styles.appTitle}>Top in Exam</Text>
-        <Text style={styles.appSubtitle}>Join the toppers community</Text>
-      </View>
-
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+    <View style={styles.gradient}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <View style={styles.card}>
-            <Text style={styles.heading}>Create your account ✨</Text>
-            <Text style={styles.subheading}>
-              We’ll personalise your practice plan based on your details.
-            </Text>
-
-            {/* 🔴 Global error banner */}
-            {globalError && (
-              <View style={styles.globalErrorBox}>
-                <Text style={styles.globalErrorText}>{globalError}</Text>
-              </View>
-            )}
-
-            {/* Mobile number */}
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Mobile Number</Text>
-              <TextInput
-                placeholder="Enter your 10-digit number"
-                placeholderTextColor="#9CA3AF"
-                style={[
-                  styles.input,
-                  errors.number && styles.inputError,
-                ]}
-                keyboardType="number-pad"
-                maxLength={10}
-                value={number}
-                onChangeText={txt => {
-                  const onlyDigits = txt.replace(/[^0-9]/g, '');
-                  setNumber(onlyDigits);
-                  if (errors.number) {
-                    setErrors(prev => ({ ...prev, number: undefined }));
-                  }
-                }}
-              />
-              {!!errors.number && (
-                <Text style={styles.errorText}>{errors.number}</Text>
-              )}
-            </View>
-
-            {/* Password */}
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Password</Text>
-
-              <View style={styles.passwordRow}>
-                <TextInput
-                  placeholder="Create a password (min 6 characters)"
-                  placeholderTextColor="#9CA3AF"
-                  style={[
-                    styles.input,
-                    styles.passwordInput,
-                    errors.pass && styles.inputError,
-                  ]}
-                  secureTextEntry={!showPass}   // 👈 toggle here
-                  autoCapitalize="none"
-                  value={pass}
-                  onChangeText={txt => {
-                    setPass(txt);
-                    if (errors.pass) {
-                      setErrors(prev => ({ ...prev, pass: undefined }));
-                    }
-                  }}
-                />
-
-                <Pressable
-                  onPress={() => setShowPass(prev => !prev)}
-                  style={styles.eyeButton}
-                  hitSlop={10}
-                >
-                  <Icon
-                    name={showPass ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color="#6B7280"
-                  />
-                </Pressable>
-              </View>
-
-              {!!errors.pass && (
-                <Text style={styles.errorText}>{errors.pass}</Text>
-              )}
-            </View>
-
-
-            {/* Current education */}
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Current Education</Text>
-              <TextInput
-                placeholder="e.g. 11th Science, 12th Science, Dropper"
-                placeholderTextColor="#9CA3AF"
-                style={[
-                  styles.input,
-                  errors.edu && styles.inputError,
-                ]}
-                value={edu}
-                onChangeText={txt => {
-                  setEdu(txt);
-                  if (errors.edu) {
-                    setErrors(prev => ({ ...prev, edu: undefined }));
-                  }
-                }}
-              />
-              {!!errors.edu && (
-                <Text style={styles.errorText}>{errors.edu}</Text>
-              )}
-            </View>
-
-            {/* City with suggestions */}
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>City</Text>
-              <TextInput
-                placeholder="e.g. Mumbai"
-                placeholderTextColor="#9CA3AF"
-                style={[
-                  styles.input,
-                  errors.city && styles.inputError,
-                ]}
-                value={city}
-                onFocus={() => setShowCitySuggestions(true)}
-                onBlur={() => {
-                  setTimeout(() => setShowCitySuggestions(false), 150);
-                }}
-                onChangeText={txt => {
-                  setCity(txt);
-                  setShowCitySuggestions(true);
-                  if (errors.city) {
-                    setErrors(prev => ({ ...prev, city: undefined }));
-                  }
-                }}
-              />
-              {!!errors.city && (
-                <Text style={styles.errorText}>{errors.city}</Text>
-              )}
-
-              {showCitySuggestions && filteredCities.length > 0 && (
-                <View style={styles.suggestionBox}>
-                  {filteredCities.map(c => (
-                    <Pressable
-                      key={c}
-                      onPress={() => handleCitySelect(c)}
-                      style={({ pressed }) => [
-                        styles.suggestionItem,
-                        pressed && styles.suggestionItemPressed,
-                      ]}
-                    >
-                      <Text style={styles.suggestionText}>{c}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Create account button */}
-            <Pressable
-              onPress={handleSignUp}
-              disabled={loading}
-              style={({ pressed }) => [
-                styles.primaryBtn,
-                pressed && !loading && styles.primaryBtnPressed,
-                loading && styles.primaryBtnDisabled,
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={false}
+          >
+            {/* Hero Section */}
+            <Animated.View
+              style={[
+                styles.heroSection,
+                {
+                  opacity: fadeAnim,
+                  transform: [{ translateY: slideAnim }, { scale: logoScale }],
+                },
               ]}
             >
-              {loading ? (
-                <ActivityIndicator color="#F9FAFB" />
-              ) : (
-                <Text style={styles.primaryBtnText}>Create Account</Text>
-              )}
-            </Pressable>
+              <View style={styles.logoContainer}>
+                <Image
+                  source={require('../../assets/images/logo.jpg')}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
+                {/* <View style={styles.logoInner}>
+                  <Icon name="school-outline" size={44} color="#FFFFFF" />
+                </View> */}
+                {/* <View style={styles.logoAccent} /> */}
+              </View>
+              <Text style={styles.brandName}>
+                <Text style={styles.brandTop}>TOP IN </Text>
+                <Text style={styles.brandExam}>EXAM</Text>
+              </Text>
+              <Text style={styles.tagline}>Master Your Entrance, Your Way</Text>
+              <Text style={styles.taglineSubtext}>Subject-Wise Practice • Real Exam Questions • Custom MCQ Tests</Text>
+            </Animated.View>
 
-            {/* Bottom link */}
-            <View style={styles.bottomRow}>
-              <Text style={styles.bottomText}>Already have an account?</Text>
-              <Pressable onPress={() => navigation.navigate('Login')}>
-                <Text style={styles.linkText}>Login</Text>
+            {/* Form Card */}
+            <Animated.View
+              style={[
+                styles.formCard,
+                {
+                  opacity: fadeAnim,
+                  transform: [{ translateY: formSlide }, { translateX: shakeAnim }],
+                },
+              ]}
+            >
+              <View style={styles.formHeader}>
+                <Text style={styles.formTitle}>Create Account</Text>
+                <Text style={styles.formSubtitle}>
+                  Get ready to start your preparation journey
+                </Text>
+              </View>
+              
+
+              {/* Error Banner */}
+              {globalError && (
+                <Animated.View style={[styles.errorBanner, { transform: [{ translateX: shakeAnim }] }]}>
+                  <View style={styles.errorIconWrap}>
+                    <Icon name="alert-circle" size={18} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.errorBannerText}>{globalError}</Text>
+                </Animated.View>
+              )}
+
+              {/* Mobile Number */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>
+                  <Icon name="phone" size={14} color={BLUE} /> Mobile Number
+                </Text>
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    focusedField === 'number' && styles.inputWrapperFocused,
+                    errors.number && styles.inputWrapperError,
+                  ]}
+                >
+                  <View style={styles.countryCodeWrap}>
+                    <Text style={styles.countryCode}>+91</Text>
+                  </View>
+                  <TextInput
+                    placeholder="Enter 10-digit mobile"
+                    placeholderTextColor="#9CA3AF"
+                    style={styles.input}
+                    keyboardType="number-pad"
+                    maxLength={10}
+                    value={number}
+                    onFocus={() => setFocusedField('number')}
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={txt => {
+                      setNumber(txt.replace(/[^0-9]/g, ''));
+                      if (errors.number) setErrors(prev => ({ ...prev, number: undefined }));
+                      if (globalError) setGlobalError(null);
+                    }}
+                  />
+                  {number.length === 10 && (
+                    <View style={styles.validIcon}>
+                      <Icon name="check-circle" size={20} color="#22C55E" />
+                    </View>
+                  )}
+                </View>
+                {errors.number && <Text style={styles.fieldError}>{errors.number}</Text>}
+              </View>
+
+              {/* Password */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>
+                  <Icon name="lock-outline" size={14} color={BLUE} /> Password
+                </Text>
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    focusedField === 'pass' && styles.inputWrapperFocused,
+                    errors.pass && styles.inputWrapperError,
+                  ]}
+                >
+                  <TextInput
+                    placeholder="Create a strong password"
+                    placeholderTextColor="#9CA3AF"
+                    style={[styles.input, styles.passwordInput]}
+                    secureTextEntry={!showPass}
+                    autoCapitalize="none"
+                    value={pass}
+                    onFocus={() => setFocusedField('pass')}
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={txt => {
+                      setPass(txt);
+                      if (errors.pass) setErrors(prev => ({ ...prev, pass: undefined }));
+                      if (globalError) setGlobalError(null);
+                    }}
+                  />
+                  <Pressable onPress={() => setShowPass(p => !p)} style={styles.eyeBtn}>
+                    <Icon
+                      name={showPass ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color="#6B7280"
+                    />
+                  </Pressable>
+                </View>
+                {errors.pass && <Text style={styles.fieldError}>{errors.pass}</Text>}
+                {pass.length > 0 && pass.length < 6 && !errors.pass && (
+                  <Text style={styles.hintText}>
+                    <Icon name="information-outline" size={12} color={ORANGE} /> Min 6 characters required
+                  </Text>
+                )}
+              </View>
+
+              {/* Current Education - Optional */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>
+                  <Icon name="book-open-outline" size={14} color={BLUE} /> Current Education{' '}
+                  <Text style={styles.optionalTag}>(Optional)</Text>
+                </Text>
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    focusedField === 'edu' && styles.inputWrapperFocused,
+                  ]}
+                >
+                  <TextInput
+                    placeholder="e.g. 12th Science, NEET Aspirant"
+                    placeholderTextColor="#9CA3AF"
+                    style={styles.input}
+                    value={edu}
+                    onFocus={() => setFocusedField('edu')}
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={setEdu}
+                  />
+                </View>
+              </View>
+
+              {/* City */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>
+                  <Icon name="map-marker-outline" size={14} color={BLUE} /> City
+                </Text>
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    focusedField === 'city' && styles.inputWrapperFocused,
+                    errors.city && styles.inputWrapperError,
+                  ]}
+                >
+                  <TextInput
+                    placeholder="Enter your city"
+                    placeholderTextColor="#9CA3AF"
+                    style={styles.input}
+                    value={city}
+                    onFocus={() => {
+                      setFocusedField('city');
+                      setShowCitySuggestions(true);
+                    }}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      setTimeout(() => setShowCitySuggestions(false), 150);
+                    }}
+                    onChangeText={txt => {
+                      setCity(txt);
+                      setShowCitySuggestions(true);
+                      if (errors.city) setErrors(prev => ({ ...prev, city: undefined }));
+                      if (globalError) setGlobalError(null);
+                    }}
+                  />
+                  {city.length > 0 && (
+                    <Pressable onPress={() => setCity('')} style={styles.clearBtn}>
+                      <Icon name="close-circle" size={18} color="#9CA3AF" />
+                    </Pressable>
+                  )}
+                </View>
+                {errors.city && <Text style={styles.fieldError}>{errors.city}</Text>}
+
+                {showCitySuggestions && filteredCities.length > 0 && (
+                  <Animated.View style={styles.suggestionsBox}>
+                    {filteredCities.slice(0, 5).map(c => (
+                      <Pressable
+                        key={c}
+                        onPress={() => handleCitySelect(c)}
+                        style={({ pressed }) => [
+                          styles.suggestionItem,
+                          pressed && styles.suggestionItemPressed,
+                        ]}
+                      >
+                        <Icon name="map-marker" size={16} color={ORANGE} />
+                        <Text style={styles.suggestionText}>{c}</Text>
+                      </Pressable>
+                    ))}
+                  </Animated.View>
+                )}
+              </View>
+
+              {/* Sign Up Button - Orange (Primary action for new users) */}
+              <Pressable
+                onPress={handleSignUp}
+                disabled={loading}
+                style={({ pressed }) => [
+                  styles.primaryBtn,
+                  pressed && !loading && styles.primaryBtnPressed,
+                  loading && styles.primaryBtnDisabled,
+                ]}
+              >
+                {loading ? (
+                  <View style={styles.loadingWrap}>
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                    <Text style={styles.loadingText}>Creating account...</Text>
+                  </View>
+                ) : (
+                  <>
+                    <Icon name="account-plus" size={20} color="#FFFFFF" />
+                    <Text style={styles.primaryBtnText}>Create Account</Text>
+                  </>
+                )}
               </Pressable>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+
+              {/* Divider */}
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <View style={styles.dividerTextWrap}>
+                  <Text style={styles.dividerText}>or</Text>
+                </View>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {/* Login Link - Blue */}
+              <Pressable
+                onPress={() => navigation.navigate('Login')}
+                style={({ pressed }) => [
+                  styles.secondaryBtn,
+                  pressed && styles.secondaryBtnPressed,
+                ]}
+              >
+                <Icon name="login" size={18} color={BLUE} />
+                <Text style={styles.secondaryBtnText}>Already have an account? Login</Text>
+              </Pressable>
+            </Animated.View>
+
+            {/* Footer */}
+            <Animated.View style={[styles.footer, { opacity: fadeAnim }]}>
+              <Icon name="shield-check" size={16} color={ORANGE} />
+              <Text style={styles.footerText}>Your data is secure with us</Text>
+            </Animated.View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </View>
   );
 }
-const PRIMARY = Colors.primary;    // Deep Blue
-const ACCENT = Colors.accent;      // Vibrant Orange
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  gradient: {
+    flex: 1,
+    backgroundColor: '#EFF6FF',
+  },
   safeArea: {
     flex: 1,
-    backgroundColor: '#F5F5F7',
   },
-  headerStrip: {
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    backgroundColor: PRIMARY,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-  appTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  appSubtitle: {
-    fontSize: 12,
-    color: '#FFFFFF',
-    marginTop: 4,
-  },
-
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 28,
+    paddingTop: 8,
+    paddingBottom: 8,
     justifyContent: 'center',
   },
 
-  card: {
-    borderRadius: 18,
-    padding: 18,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+  // Hero Section
+  heroSection: {
+    alignItems: 'center',
+    marginBottom: 10,
   },
-  heading: {
+  logoContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  logoInner: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoImage: {
+    width: 70,
+    height: 70,
+    borderRadius: 16,
+  },
+  logoAccent: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: ORANGE,
+    borderWidth: 2,
+    borderColor: '#EFF6FF',
+  },
+  brandName: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  brandTop: {
+    color: BLUE,
+  },
+  brandExam: {
+    color: ORANGE,
+  },
+  tagline: {
+    fontSize: 13,
+    color: '#4B5563',
+    marginTop: 4,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  taglineSubtext: {
+    fontSize: 10,
+    color: '#6B7280',
+    marginTop: 2,
+    fontWeight: '400',
+    textAlign: 'center',
+  },
+
+  // Form Card
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+    borderTopWidth: 3,
+    borderTopColor: ORANGE,
+  },
+  formHeader: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  formTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: '#111827',
   },
-  subheading: {
+  formSubtitle: {
     fontSize: 13,
     color: '#6B7280',
-    marginTop: 4,
-    marginBottom: 18,
+    marginTop: 3,
   },
 
-  // global error banner
-  globalErrorBox: {
-    marginBottom: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
+  // Error Banner
+  errorBanner: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    // subtle shadow for card feel
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
   },
-  globalErrorText: {
+  errorIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorBannerText: {
     flex: 1,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 13,
     color: '#B91C1C',
+    fontWeight: '500',
   },
 
-
-  fieldGroup: {
-    marginBottom: 12,
+  // Input Groups
+  inputGroup: {
+    marginBottom: 6,
   },
-  label: {
+  inputLabel: {
     fontSize: 12,
-    color: '#4B5563',
+    fontWeight: '600',
+    color: '#374151',
     marginBottom: 4,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: '#111827',
-    fontSize: 13,
-    backgroundColor: '#F9FAFB',
-  },
-  inputError: {
-    borderColor: '#F97373',
-  },
-  errorText: {
-    marginTop: 4,
+  optionalTag: {
     fontSize: 11,
-    color: '#DC2626',
+    fontWeight: '400',
+    color: ORANGE,
   },
-
-  // suggestions
-  suggestionBox: {
-    marginTop: 4,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    backgroundColor: '#FFFFFF',
-    maxHeight: 150,
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
     overflow: 'hidden',
   },
-  suggestionItem: {
-    paddingVertical: 8,
+  inputWrapperFocused: {
+    borderColor: BLUE,
+    backgroundColor: '#FFFFFF',
+    shadowColor: BLUE,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  inputWrapperError: {
+    borderColor: '#F87171',
+    backgroundColor: '#FEF2F2',
+  },
+  countryCodeWrap: {
     paddingHorizontal: 10,
+    paddingVertical: 10,
+    backgroundColor: '#F3F4F6',
+    borderRightWidth: 1,
+    borderRightColor: '#E5E7EB',
   },
-  suggestionItemPressed: {
-    backgroundColor: '#EEF2FF',
+  countryCode: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: BLUE,
   },
-  suggestionText: {
-    fontSize: 13,
+  input: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    fontSize: 15,
     color: '#111827',
   },
-
-  primaryBtn: {
-    marginTop: 10,
-    borderRadius: 999,
-    paddingVertical: 12,
-    alignItems: 'center',
-    backgroundColor: PRIMARY,
-  },
-  primaryBtnPressed: {
-    backgroundColor: Colors.primaryDark,
-  },
-  primaryBtnDisabled: {
-    opacity: 0.6,
-  },
-  primaryBtnText: {
-    color: '#F9FAFB',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-
-  bottomRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 16,
-    gap: 4,
-  },
-  bottomText: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  linkText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: ACCENT,
-  },
-  passwordRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   passwordInput: {
-    flex: 1,
-    paddingRight: 40, // space so text doesn't go under the eye icon
+    paddingRight: 50,
   },
-  eyeButton: {
+  eyeBtn: {
     position: 'absolute',
-    right: 10,
+    right: 12,
     padding: 4,
   },
+  clearBtn: {
+    marginRight: 12,
+    padding: 4,
+  },
+  validIcon: {
+    marginRight: 12,
+  },
+  fieldError: {
+    fontSize: 12,
+    color: '#DC2626',
+    marginTop: 4,
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  hintText: {
+    fontSize: 11,
+    color: ORANGE,
+    marginTop: 4,
+    marginLeft: 4,
+    fontWeight: '500',
+  },
 
+  // City Suggestions
+  suggestionsBox: {
+    marginTop: 6,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  suggestionItemPressed: {
+    backgroundColor: '#FFF7ED',
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+
+  // Primary Button - Orange for SignUp
+  primaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: ORANGE,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 4,
+    shadowColor: ORANGE,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  primaryBtnPressed: {
+    backgroundColor: Colors.accentDark,
+    transform: [{ scale: 0.98 }],
+  },
+  primaryBtnDisabled: {
+    opacity: 0.8,
+  },
+  primaryBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  loadingWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  loadingText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+
+  // Divider
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dividerTextWrap: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    backgroundColor: BLUE,
+    borderRadius: 12,
+  },
+  dividerText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+
+  // Secondary Button - Blue for Login
+  secondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 2,
+    borderColor: BLUE,
+    borderRadius: 12,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(7, 78, 135, 0.06)',
+  },
+  secondaryBtnPressed: {
+    backgroundColor: 'rgba(7, 78, 135, 0.14)',
+  },
+  secondaryBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: BLUE,
+  },
+
+  // Footer
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 6,
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
 });

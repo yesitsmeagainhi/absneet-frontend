@@ -46,13 +46,15 @@
 
 // App.tsx (root of project, same folder as index.js and app.json)
 import React from 'react';
+import { StatusBar } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import RootNavigator from './src/navigation/rootnavigator';
+import RootNavigator from './src/navigation/RootNavigator';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { NotificationProvider } from './src/context/NotificationContext';
+import { ExamProvider } from './src/context/ExamContext';
 
 // Setup Poppins as default font for all Text components
 import { setupDefaultFonts } from './src/utils/setupFonts';
@@ -62,13 +64,22 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
+        {/* Default StatusBar - individual screens override this */}
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor="#FFFFFF"
+          translucent={false}
+        />
         <ThemeProvider>
           <NotificationProvider>
-            <NavigationContainer>
-              <RootNavigator />
-            </NavigationContainer>
+            <ExamProvider>
+              <NavigationContainer>
+                <RootNavigator />
+              </NavigationContainer>
+            </ExamProvider>
           </NotificationProvider>
         </ThemeProvider>
-      </GestureHandlerRootView></SafeAreaProvider>
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }
