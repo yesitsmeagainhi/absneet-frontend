@@ -1930,6 +1930,7 @@ import {
   useWindowDimensions,
   StatusBar,
   Platform,
+  BackHandler,
 } from 'react-native';
 import {
   useNavigation,
@@ -2496,7 +2497,24 @@ export default function HomeScreen() {
     setShowLogoutConfirm(false);
   }, []);
 
+  // Android back button → go back to MainScreen
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        nav.navigate('MainScreen');
+        return true; // prevent default back behaviour
+      };
 
+      const subscription = BackHandler.addEventListener(
+        'hardwareBackPress',
+        onBackPress,
+      );
+
+      return () => {
+        subscription.remove();
+      };
+    }, [nav]),
+  );
 
   const renderFallbackBanner = () => (
     <View style={styles.bannerCard}>
