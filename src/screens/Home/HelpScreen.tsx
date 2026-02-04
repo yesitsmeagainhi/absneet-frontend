@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
     View,
     Text,
@@ -7,12 +7,13 @@ import {
     TouchableOpacity,
     StyleSheet,
     ScrollView,
-    Alert,
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
     Linking,
     useWindowDimensions,
+    Modal,
+    Animated,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
@@ -24,7 +25,7 @@ import { useTheme } from '../../theme/ThemeContext';
 
 // 🔹 Apps Script config (no change)
 const APPS_SCRIPT_URL =
-    'https://script.google.com/macros/s/AKfycbxeOPmGJnsmS2oc3YxSb39LLwAzkwvsSJla061FPNTgpaOrrWXjRRAE2CysxEJaCro/exec';
+    'https://script.google.com/macros/s/AKfycby-ewQdPXa09EeX_HObZzgs4ODyS8AmQ3y4e-kVZbAn-Zneri2OxK6Bc8WGZHV2Qqw/exec';
 const APPS_SCRIPT_TOKEN = 'secure@009';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Help'>;
@@ -60,6 +61,47 @@ export default function HelpScreen({}: Props) {
     const [email, setEmail] = useState('');
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
+
+    // 🔹 Custom Modal state
+    type ModalType = 'success' | 'error' | 'warning' | 'info';
+    type ModalButton = { text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' };
+    const [modalVisible, setModalVisible] = useState(false);
+    const [modalConfig, setModalConfig] = useState<{
+        type: ModalType;
+        title: string;
+        message: string;
+        buttons: ModalButton[];
+    }>({ type: 'info', title: '', message: '', buttons: [] });
+    const scaleAnim = useRef(new Animated.Value(0)).current;
+    const opacityAnim = useRef(new Animated.Value(0)).current;
+
+    const showModal = (type: ModalType, title: string, msg: string, buttons: ModalButton[] = [{ text: 'OK' }]) => {
+        setModalConfig({ type, title, message: msg, buttons });
+        setModalVisible(true);
+        Animated.parallel([
+            Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 50, friction: 7 }),
+            Animated.timing(opacityAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+        ]).start();
+    };
+
+    const hideModal = (callback?: () => void) => {
+        Animated.parallel([
+            Animated.timing(scaleAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+            Animated.timing(opacityAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+        ]).start(() => {
+            setModalVisible(false);
+            callback?.();
+        });
+    };
+
+    const getModalIcon = (type: ModalType) => {
+        switch (type) {
+            case 'success': return { name: 'check-circle', color: '#10B981', bg: '#D1FAE5' };
+            case 'error': return { name: 'close-circle', color: '#EF4444', bg: '#FEE2E2' };
+            case 'warning': return { name: 'alert-circle', color: '#F59E0B', bg: '#FEF3C7' };
+            default: return { name: 'information', color: '#3B82F6', bg: '#DBEAFE' };
+        }
+    };
 
     // ✅ Subscribe to Firestore `nodes/contactInfo` in real-time
     useEffect(() => {
@@ -126,16 +168,38 @@ export default function HelpScreen({}: Props) {
         const m = message.trim();
         const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
-        if (!n || !e || !m) {
-            Alert.alert('Missing info', 'Please fill all fields.');
+        // Check for missing fields and list them
+        const missingFields: string[] = [];
+        if (!n) missingFields.push('Name');
+        if (!e) missingFields.push('Email');
+        if (!m) missingFields.push('Message');
+
+        if (missingFields.length > 0) {
+            showModal(
+                'warning',
+                'Required Fields Missing',
+                // `Please fill in the following:\n\n• ${missingFields.join('\n• ')}\n\n
+                `All fields are required to submit your message.`,
+                [{ text: 'Got it' }],
+            );
             return false;
         }
         if (!emailOk) {
-            Alert.alert('Invalid email', 'Please enter a valid email address.');
+            showModal(
+                'warning',
+                'Invalid Email Address',
+                'Please enter a valid email address\n(e.g., yourname@example.com)\n\nWe need this to respond to your query.',
+                [{ text: 'Fix Email' }],
+            );
             return false;
         }
         if (m.length < 10) {
-            Alert.alert('Message too short', 'Please add a few more details.');
+            showModal(
+                'info',
+                'Message Too Short',
+                'Please provide more details about your query so we can assist you better.\n\nMinimum 10 characters required.',
+                [{ text: 'Add Details' }],
+            );
             return false;
         }
         return true;
@@ -162,6 +226,12 @@ export default function HelpScreen({}: Props) {
                 email: email.trim(),
                 message: message.trim(),
                 docId: ref.id,
+                // Enhanced metadata
+                platform: Platform.OS,
+                osVersion: Platform.Version?.toString() || 'Unknown',
+                appName: 'TOP IN EXAM',
+                timestamp: new Date().toISOString(),
+                subject: `Support Request from ${name.trim()}`,
             };
 
             const res = await fetch(APPS_SCRIPT_URL, {
@@ -185,16 +255,27 @@ export default function HelpScreen({}: Props) {
                 throw new Error(j.error || 'Email relay failed');
             }
 
+            const userName = name.trim().split(' ')[0];
             setName('');
             setEmail('');
             setMessage('');
-            Alert.alert(
-                '✅ Message Sent',
-                'Your message has been emailed to our support team.',
+            showModal(
+                'success',
+                'Message Sent Successfully!',
+                `Thank you for reaching out, ${userName}!\n\nOur support team has received your message and will respond to your email within 24 hours (Mon-Sat).\n\nFor urgent queries, feel free to call or WhatsApp us.`,
+                [{ text: 'Great!' }],
             );
         } catch (err: any) {
             console.error('Contact send error:', err);
-            Alert.alert('Failed', String(err?.message || err));
+            showModal(
+                'error',
+                'Message Failed',
+                'We couldn\'t send your message right now. Please check your internet connection and try again.\n\nAlternatively, you can reach us via call or WhatsApp.',
+                [
+                    { text: 'Try Again', onPress: handleSubmit },
+                    { text: 'OK', style: 'cancel' },
+                ],
+            );
         } finally {
             setLoading(false);
         }
@@ -506,6 +587,79 @@ export default function HelpScreen({}: Props) {
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
+
+            {/* 🔹 Custom Styled Modal */}
+            <Modal
+                transparent
+                visible={modalVisible}
+                animationType="none"
+                onRequestClose={() => hideModal()}
+            >
+                <Animated.View
+                    style={[
+                        styles.modalOverlay,
+                        { opacity: opacityAnim },
+                    ]}
+                >
+                    <Animated.View
+                        style={[
+                            styles.modalContainer,
+                            { transform: [{ scale: scaleAnim }] },
+                        ]}
+                    >
+                        {/* Icon Header */}
+                        <View
+                            style={[
+                                styles.modalIconContainer,
+                                { backgroundColor: getModalIcon(modalConfig.type).bg },
+                            ]}
+                        >
+                            <View style={[
+                                styles.modalIconCircle,
+                                { backgroundColor: getModalIcon(modalConfig.type).color },
+                            ]}>
+                                <Icon
+                                    name={getModalIcon(modalConfig.type).name}
+                                    size={32}
+                                    color="#FFFFFF"
+                                />
+                            </View>
+                        </View>
+
+                        {/* Content */}
+                        <View style={styles.modalContent}>
+                            <Text style={styles.modalTitle}>{modalConfig.title}</Text>
+                            <Text style={styles.modalMessage}>{modalConfig.message}</Text>
+                        </View>
+
+                        {/* Buttons */}
+                        <View style={styles.modalButtonContainer}>
+                            {modalConfig.buttons.map((btn, idx) => (
+                                <TouchableOpacity
+                                    key={idx}
+                                    style={[
+                                        styles.modalButton,
+                                        btn.style === 'cancel' && styles.modalButtonCancel,
+                                        btn.style === 'destructive' && styles.modalButtonDestructive,
+                                        modalConfig.buttons.length === 1 && { flex: 1 },
+                                    ]}
+                                    onPress={() => hideModal(btn.onPress)}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.modalButtonText,
+                                            btn.style === 'cancel' && styles.modalButtonTextCancel,
+                                        ]}
+                                    >
+                                        {btn.text}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </Animated.View>
+                </Animated.View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -676,5 +830,87 @@ const createStyles = (isDark: boolean) =>
         infoText: {
             color: isDark ? '#E5E7EB' : '#374151',
             flex: 1,
+        },
+
+        // 🔹 Custom Modal Styles
+        modalOverlay: {
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 24,
+        },
+        modalContainer: {
+            backgroundColor: isDark ? '#1F2937' : '#FFFFFF',
+            borderRadius: 24,
+            width: '100%',
+            maxWidth: 340,
+            overflow: 'hidden',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: 0.25,
+            shadowRadius: 20,
+            elevation: 15,
+        },
+        modalIconContainer: {
+            alignItems: 'center',
+            paddingVertical: 24,
+            paddingHorizontal: 20,
+        },
+        modalIconCircle: {
+            width: 64,
+            height: 64,
+            borderRadius: 32,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            elevation: 6,
+        },
+        modalContent: {
+            paddingHorizontal: 24,
+            paddingBottom: 20,
+            alignItems: 'center',
+        },
+        modalTitle: {
+            fontSize: 20,
+            fontWeight: '700',
+            color: isDark ? '#F9FAFB' : '#111827',
+            textAlign: 'center',
+            marginBottom: 12,
+        },
+        modalMessage: {
+            fontSize: 14,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            textAlign: 'center',
+            lineHeight: 22,
+        },
+        modalButtonContainer: {
+            flexDirection: 'row',
+            borderTopWidth: 1,
+            borderTopColor: isDark ? '#374151' : '#E5E7EB',
+        },
+        modalButton: {
+            flex: 1,
+            paddingVertical: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: ACCENT,
+        },
+        modalButtonCancel: {
+            backgroundColor: isDark ? '#374151' : '#F3F4F6',
+        },
+        modalButtonDestructive: {
+            backgroundColor: '#EF4444',
+        },
+        modalButtonText: {
+            fontSize: 16,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        modalButtonTextCancel: {
+            color: isDark ? '#D1D5DB' : '#4B5563',
         },
     });

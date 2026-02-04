@@ -1,5 +1,5 @@
 // src/screens/Main/MainScreen.tsx
-import React, { useMemo, useCallback, useEffect, useState } from 'react';
+import React, { useMemo, useCallback, useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,8 @@ import {
   useWindowDimensions,
   FlatList,
   BackHandler,
-  Alert,
+  Modal,
+  Animated,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -113,6 +114,30 @@ export default function MainScreen() {
   // Logout confirmation state
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
+  // 🔹 Custom Exit Modal state
+  type ExitModalType = 'exit' | 'warning' | 'info';
+  const [exitModalVisible, setExitModalVisible] = useState(false);
+  const exitScaleAnim = useRef(new Animated.Value(0)).current;
+  const exitOpacityAnim = useRef(new Animated.Value(0)).current;
+
+  const showExitModal = () => {
+    setExitModalVisible(true);
+    Animated.parallel([
+      Animated.spring(exitScaleAnim, { toValue: 1, useNativeDriver: true, tension: 50, friction: 7 }),
+      Animated.timing(exitOpacityAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const hideExitModal = (callback?: () => void) => {
+    Animated.parallel([
+      Animated.timing(exitScaleAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+      Animated.timing(exitOpacityAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+    ]).start(() => {
+      setExitModalVisible(false);
+      callback?.();
+    });
+  };
+
   // Fetch user name from Firestore
   useEffect(() => {
     const fetchUserName = async () => {
@@ -209,22 +234,11 @@ export default function MainScreen() {
     setShowLogoutConfirm(false);
   }, []);
 
-  // Android back button → confirm exit
+  // Android back button → confirm exit with custom modal
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        Alert.alert(
-          'Exit Top in Exam',
-          'Are you sure you want to close the app?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Exit',
-              style: 'destructive',
-              onPress: () => BackHandler.exitApp(),
-            },
-          ],
-        );
+        showExitModal();
         return true; // prevent default back behaviour
       };
 
@@ -708,6 +722,62 @@ export default function MainScreen() {
             </View>
           </View>
         )}
+
+        {/* 🔹 Custom Exit Confirmation Modal - Minimal */}
+        <Modal
+          transparent
+          visible={exitModalVisible}
+          animationType="none"
+          onRequestClose={() => hideExitModal()}
+        >
+          <Animated.View
+            style={[
+              styles.exitModalOverlay,
+              { opacity: exitOpacityAnim },
+            ]}
+          >
+            <Animated.View
+              style={[
+                styles.exitModalContainer,
+                { transform: [{ scale: exitScaleAnim }] },
+              ]}
+            >
+              {/* Content */}
+              <View style={styles.exitModalContent}>
+                <Icon name="exit-to-app" size={28} color={isDark ? '#F87171' : '#DC2626'} style={{ marginBottom: 12 }} />
+                <Text style={styles.exitModalTitle}>Exit App?</Text>
+                <Text style={styles.exitModalMessage}>
+                  Are you sure you want to close the app?
+                </Text>
+              </View>
+
+              {/* Buttons */}
+              <View style={styles.exitModalButtonContainer}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.exitModalButton,
+                    styles.exitModalButtonCancel,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  onPress={() => hideExitModal()}
+                >
+                  <Text style={styles.exitModalButtonTextCancel}>Cancel</Text>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.exitModalButton,
+                    styles.exitModalButtonExit,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  onPress={() => hideExitModal(() => BackHandler.exitApp())}
+                >
+                  <Text style={styles.exitModalButtonText}>Exit</Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          </Animated.View>
+        </Modal>
 
         {/* Intro tips overlay */}
         {showIntro && currentStep && introPos && (
@@ -1290,5 +1360,73 @@ const createStyles = (isDark: boolean, screenWidth: number = 360) =>
       resizeMode: 'contain',
       transform: [{ rotate: '180deg' }],
       marginTop: -Math.max(8, screenWidth * 0.025),
+    },
+
+    // 🔹 Custom Exit Modal Styles - Minimal
+    exitModalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 32,
+    },
+    exitModalContainer: {
+      backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
+      borderRadius: 16,
+      width: '100%',
+      maxWidth: 300,
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      elevation: 8,
+    },
+    exitModalContent: {
+      paddingHorizontal: 24,
+      paddingTop: 24,
+      paddingBottom: 20,
+      alignItems: 'center',
+    },
+    exitModalTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: isDark ? '#F9FAFB' : '#111827',
+      textAlign: 'center',
+      marginBottom: 6,
+    },
+    exitModalMessage: {
+      fontSize: 14,
+      color: isDark ? '#9CA3AF' : '#6B7280',
+      textAlign: 'center',
+    },
+    exitModalButtonContainer: {
+      flexDirection: 'row',
+      borderTopWidth: 1,
+      borderTopColor: isDark ? '#334155' : '#E5E7EB',
+    },
+    exitModalButton: {
+      flex: 1,
+      paddingVertical: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    exitModalButtonCancel: {
+      backgroundColor: 'transparent',
+      borderRightWidth: 1,
+      borderRightColor: isDark ? '#334155' : '#E5E7EB',
+    },
+    exitModalButtonExit: {
+      backgroundColor: 'transparent',
+    },
+    exitModalButtonText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: '#DC2626',
+    },
+    exitModalButtonTextCancel: {
+      fontSize: 15,
+      fontWeight: '500',
+      color: isDark ? '#9CA3AF' : '#6B7280',
     },
   });
